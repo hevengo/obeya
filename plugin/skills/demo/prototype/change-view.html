@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Code video · Codex speed selection</title>
+<style>
+  * { box-sizing: border-box; cursor: none !important; }
+  body { margin: 0; background: #f7f6f2; color: #202b35; font: 22px/1.4 system-ui, sans-serif; }
+  main { padding: 24px 28px; }
+  h1 { margin: 0; font-size: 34px; line-height: 1.18; letter-spacing: -.035em; }
+  .subtitle { color: #637079; margin: 7px 0 16px; font-size: 17px; }
+  .structure { display: block; width: 100%; }
+  .lane { fill: #eeede7; stroke: #d8d8d0; }
+  .lane-label { font-size: 16px; font-weight: 750; letter-spacing: .1em; fill: #65716e; }
+  .lane-desc { font-size: 13px; fill: #73807b; }
+  .node rect { fill: #fff; stroke: #8da7d5; stroke-width: 1.5; }
+  .node .name { font-size: 21px; font-weight: 720; fill: #25364e; }
+  .node .path { font: 13px ui-monospace, monospace; fill: #5b697a; }
+  .node .delta { font-size: 15px; font-weight: 650; fill: #285ab0; }
+  .node.lit rect { fill: #e1ebfe; stroke: #2563eb; stroke-width: 3; }
+  .node.lit .name { fill: #174cae; }
+  .edge path { stroke: #a3afbd; stroke-width: 2; fill: none; }
+  .edge.cross path { stroke-dasharray: 5 4; }
+  .edge text { font-size: 13px; fill: #63738b; text-anchor: middle; paint-order: stroke; stroke: #f7f6f2; stroke-width: 5px; stroke-linejoin: round; }
+  .edge.lit path { stroke: #2563eb; stroke-width: 3; marker-end: url(#blue); }
+  .edge.lit text { fill: #174cae; font-weight: 700; }
+  .adapter-boundary { stroke: #9e9790; stroke-dasharray: 5 4; }
+  .boundary-label { font-size: 12px; fill: #6f6458; paint-order: stroke; stroke: #eeede7; stroke-width: 4px; }
+  .note { margin-top: 13px; padding: 12px 16px; background: #e9eef7; border-left: 3px solid #2563eb; font-size: 18px; line-height: 1.35; }
+  .note small { display: block; margin-top: 4px; color: #617087; font: 12px/1.5 ui-monospace, monospace; }
+  .inventory { font-size: 15px; color: #6a736e; margin: 10px 0 0; }
+  .panels { display: grid; gap: 14px; }
+  .panel { border: 1px solid #d8d9d2; border-radius: 7px; background: #fff; padding: 12px 20px; }
+  .panel h2 { margin: 0 0 6px; font-size: 25px; letter-spacing: -.02em; }
+  .panel p { margin: 4px 0; font-size: 21px; }
+  .panel b { color: #486176; font-size: 17px; margin-right: 5px; }
+  .panel small { display: block; margin-top: 10px; color: #657388; font: 13px/1.5 ui-monospace, monospace; }
+  .panel.focus { border: 2px solid #2563eb; padding: 11px 19px; background: #eff4fe; }
+  .panels.focused .panel:not(.focus) { opacity: .48; }
+  .code-stack { display: grid; gap: 20px; }
+  .code { border-radius: 7px; overflow: hidden; background: #17242d; color: #e0e8e9; }
+  .code-head { display: flex; justify-content: space-between; padding: 12px 18px; font: 15px/1.4 ui-monospace, monospace; background: #233641; color: #ccd7d9; }
+  .code-body { padding: 16px 14px; }
+  .line { display: flex; font: 21px/1.5 ui-monospace, 'SFMono-Regular', Menlo, monospace; }
+  .number { color: #81969f; flex: 0 0 52px; font-size: 15px; padding: 5px 12px 0 0; text-align: right; }
+  .sign { flex: 0 0 19px; color: #90bba9; }
+  .text { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; tab-size: 2; }
+  .line.add { background: #203e49; color: #d6edf9; }
+  .line.ring { outline: 2px solid #80acff; background: #214d72; color: #fff; }
+  .code-label { padding: 10px 18px; font-size: 17px; color: #bad5f5; background: #243e51; }
+</style>
+<main><h1 id="title"></h1><div class="subtitle" id="subtitle"></div><div id="content"></div></main>
+<script type="module">
+  const change = await fetch('/change.json').then(r => r.json());
+  const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
+  const code = async ({ file, from, to, label = '' }, index) => {
+    const result = await fetch('/excerpt?' + new URLSearchParams({ file, from, to }));
+    if (!result.ok) throw new Error('Missing source excerpt');
+    const rows = await result.json();
+    // One rule for every excerpt: remove common indentation, then let the browser wrap.
+    const indent = Math.min(...rows.filter(r => r.text.trim()).map(r => r.text.match(/^\s*/)[0].length));
+    return `<section class="code"><div class="code-head"><span>${escape(file)}</span><span>${from}–${to} · 8a82fe8a</span></div><div class="code-body">${rows.map(row => `<div class="line ${row.kind}" data-panel="${index}" data-line="${row.after}"><span class="number">${row.after}</span><span class="sign">${row.kind === 'add' ? '+' : ''}</span><span class="text">${escape(row.text.slice(indent))}</span></div>`).join('')}</div><div class="code-label">${escape(label)}</div></section>`;
+  };
+  const inventory = ['Tests', 'Documentation'].map(area => {
+    const files = change.files.filter(f => f.area === area);
+    return `${area}: ${files.length} ${files.length === 1 ? 'file' : 'files'}, +${files.reduce((n, f) => n + f.added, 0)}`;
+  }).join(' · ');
+  const structure = () => `<svg class="structure" viewBox="0 0 960 520" role="img" aria-label="UI, server and shared core; changed modules and selected uses">
+    <defs>${['gray', 'blue'].map((id, i) => `<marker id="${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="${i ? '#2563eb' : '#a3afbd'}"/></marker>`).join('')}</defs>
+    <rect class="lane" x="0" y="0" width="272" height="520" rx="6"/>
+    <rect class="lane" x="294" y="0" width="380" height="520" rx="6"/>
+    <rect class="lane" x="696" y="0" width="264" height="520" rx="6"/>
+    <text class="lane-label" x="16" y="27">UI</text><text class="lane-desc" x="16" y="45">Owner-facing controls</text>
+    <text class="lane-label" x="310" y="27">SERVER</text><text class="lane-desc" x="310" y="45">Settings · launch policy · harness</text>
+    <text class="lane-label" x="712" y="27">CORE</text><text class="lane-desc" x="712" y="45">Shared by UI + server</text>
+    <line class="adapter-boundary" x1="302" x2="666" y1="417" y2="417"/>
+    <text class="boundary-label" x="320" y="417">policy / protocol · inferred boundary</text>
+    ${change.edges.map(e => `<g class="edge ${e.cross ? 'cross' : ''}" data-edge="${e.id}"><path d="${e.d}" marker-end="url(#gray)"/>${e.label ? `<text x="${e.tx}" y="${e.ty}">${escape(e.label)}</text>` : ''}</g>`).join('')}
+    ${change.nodes.map(n => `<g class="node" data-node="${n.id}" transform="translate(${n.x},${n.y})"><rect width="${n.w}" height="${n.h}" rx="6"/><text class="name" x="12" y="27">${escape(n.title)}</text><text class="path" x="12" y="49">${escape(n.file)}</text><text class="delta" x="12" y="${n.h - 12}">+${n.added} −${n.removed}</text></g>`).join('')}
+  </svg><div class="inventory">${inventory} · counted, not toured · no generated files</div><div class="note" id="detail"></div>`;
+  const tour = window.tour = {
+    async show(spec) {
+      document.querySelector('#title').textContent = spec.title;
+      document.querySelector('#subtitle').textContent = spec.subtitle ?? '';
+      let html;
+      if (spec.view === 'structure') html = structure();
+      else if (spec.view === 'evidence') html = `<div class="code-stack">${(await Promise.all(spec.excerpts.map(code))).join('')}</div><div class="note">${escape(spec.note)}</div>`;
+      else html = `<div class="panels">${spec.panels.map((p, i) => `<section class="panel" data-point="${i}"><h2>${escape(p.name)}</h2>${p.rows.map(([label, text]) => `<p><b>${escape(label)}</b> ${escape(text)}</p>`).join('')}<small>${escape(p.where)}</small></section>`).join('')}</div>${spec.note ? `<div class="note">${escape(spec.note)}</div>` : ''}`;
+      document.querySelector('#content').innerHTML = html;
+      this.light(spec.light ?? [], spec.note);
+      if (spec.focus !== undefined) this.focus(spec.focus);
+    },
+    light(ids, note) {
+      document.querySelectorAll('[data-node], [data-edge]').forEach(e => e.classList.toggle('lit', ids.includes(e.dataset.node ?? e.dataset.edge)));
+      const edge = change.edges.find(e => ids.includes(e.id));
+      const detail = document.querySelector('#detail');
+      if (detail) detail.innerHTML = `${escape(note ?? edge?.note ?? 'Blue boxes carry the change. Arrows show selected uses; dashed arrows cross layers.')} ${edge ? `<small>${edge.proof.map(([file, line]) => escape(file + ':' + line)).join(' → ')}</small>` : ''}`;
+    },
+    ring(from, to = from, panel = 0) {
+      document.querySelectorAll('.ring').forEach(e => e.classList.remove('ring'));
+      for (let n = from; n <= to; n++) document.querySelector(`[data-panel="${panel}"][data-line="${n}"]`)?.classList.add('ring');
+    },
+    focus(index) {
+      document.querySelector('.panels')?.classList.add('focused');
+      document.querySelectorAll('.panel').forEach((e, i) => e.classList.toggle('focus', i === index));
+    },
+  };
+  await tour.show({ view: 'structure', title: 'One choice, three layers', subtitle: 'Codex speed selection · 8a82fe8a · 10 files · +126 −16', light: [] });
+  window.changeViewReady = true;
+</script>
+</html>
