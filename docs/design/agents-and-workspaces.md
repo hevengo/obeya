@@ -130,6 +130,17 @@ stores its family. Saving restarts nothing; agents starting afterwards take it, 
 running session keeps its own, except the voice commands' session, which reopens when the
 Coordinator's setting changes (as for another language).
 
+Each group on Codex also has a "Speed" selector: Normal (the preset), Fast and Ultrafast, independent
+of its model and effort. Faster modes depend on the model and the owner's plan. The choice is saved
+with the group as `speed` in `settings.json` (`normal`, `fast`, `ultrafast`; Normal is omitted), and
+applies to sessions that start or resume afterwards. A session already running keeps its speed.
+Switching a group to Claude Code clears its speed choice. Codex receives an explicit service tier
+on both thread start and resume: `default` for Normal, `priority` for Fast, `ultrafast` for Ultrafast,
+so Normal overrides a faster tier in Codex's own configuration or a resumed thread. The same tier
+applies to subsequent turns, including on a host. A card's own harness or model choice takes the
+group's speed when it runs on Codex; a Codex session whose group now runs on Claude Code resumes at
+Normal speed.
+
 A card may run on another harness, model or effort than its group. Joined to each button that
 starts a card (and "Accept and start" on a proposed task, "Start anyway" in the queue) is a narrow
 part with a triangle that opens a menu: each ready harness's models, as "Agents and models" lists

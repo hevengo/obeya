@@ -28,7 +28,7 @@ import { OWN_GROUP } from './spawn';
 import { withoutHeredocs } from './shell';
 import type { Messages } from '../core/messages';
 import type { ToolCall, ToolWatch } from './folder';
-import { agentDefault, type AgentEffort, type AgentRole, type AgentSetting, type CardAgent, type Harness, storedModel } from '../core/types';
+import { agentDefault, type AgentEffort, type AgentRole, type AgentSetting, type AgentSpeed, type CardAgent, type Harness, storedModel } from '../core/types';
 import { messageOf } from '../core/text';
 import { claudeLoginFailed, codexLoginLost } from '../core/login';
 
@@ -119,6 +119,8 @@ export interface AgentSpec {
   env?: Record<string, string>;
   /** How much the model thinks; low for quick, small jobs. */
   effort?: AgentEffort;
+  /** Codex's processing speed; absent is normal. */
+  speed?: AgentSpeed;
   /** The model, when not the default: a smaller one for small, frequent jobs; for Codex a family, its newest model on the machine the agent runs on. */
   model?: string;
   /** The group the agent belongs to, whose harness, model and effort the owner chooses (`withAgentSetting`). */
@@ -190,10 +192,10 @@ export function withAgentSetting(runtime: AgentRuntime, setting: (role: AgentRol
       const own = spec.agent;
       const chosen: AgentSetting = { ...group, ...(own?.harness && own.model ? { harness: own.harness, model: own.model } : {}), ...(own?.effort ? { effort: own.effort } : {}) };
       const on: Harness = spec.resume ? sessionHarness(spec.resume) : chosen.harness;
-      const { harness, model, effort } = on === chosen.harness ? chosen : { ...agentDefault(spec.role, on), effort: chosen.effort };
-      const { model: _, agent: __, ...rest } = spec;
+      const { harness, model, effort, speed } = on === chosen.harness ? chosen : { ...agentDefault(spec.role, on), effort: chosen.effort };
+      const { model: _, agent: __, speed: ___, ...rest } = spec;
       const given = storedModel(harness, model);
-      return runtime.start({ ...rest, harness, effort, ...(given === 'default' ? {} : { model: given }) }, firstMessage, images);
+      return runtime.start({ ...rest, harness, effort, ...(given === 'default' ? {} : { model: given }), ...(harness === 'codex' && speed ? { speed } : {}) }, firstMessage, images);
     },
   };
 }

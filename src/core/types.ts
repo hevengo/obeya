@@ -2619,6 +2619,8 @@ export const AGENT_MODELS = ['default', 'fable', 'opus', 'sonnet', 'haiku'] as c
 export type AgentModel = (typeof AGENT_MODELS)[number];
 export const AGENT_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type AgentEffort = (typeof AGENT_EFFORTS)[number];
+export const AGENT_SPEEDS = ['normal', 'fast', 'ultrafast'] as const;
+export type AgentSpeed = (typeof AGENT_SPEEDS)[number];
 /**
  * The harness, model and effort a group of agents runs with. `model`: for Claude Code one of
  * `AGENT_MODELS` (`default` for its own default); for Codex a model family (`codexFamily`), which
@@ -2628,6 +2630,8 @@ export interface AgentSetting {
   harness: Harness;
   model: string;
   effort: AgentEffort;
+  /** Codex's processing speed; absent is normal. */
+  speed?: AgentSpeed;
 }
 /**
  * What the owner chose for one card's agent, over the workers' group's (`Item.agent`): a harness with

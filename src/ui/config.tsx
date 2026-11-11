@@ -4,7 +4,7 @@
 // own settings come from its command line and show read-only.
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { AGENT_EFFORTS, AGENT_ROLES, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentsView, type Harness, HARNESSES, modelChoices, type ModelChoice, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSpaceView, type DemoSite, type DemoVoiceCheck, type FilledClones, type PersonalSiteView, type SiteSetupJob, type TagProposalJob, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type PageTags, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type CostsView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
+import { AGENT_EFFORTS, AGENT_ROLES, AGENT_SPEEDS, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentSpeed, type AgentsView, type Harness, HARNESSES, modelChoices, type ModelChoice, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSpaceView, type DemoSite, type DemoVoiceCheck, type FilledClones, type PersonalSiteView, type SiteSetupJob, type TagProposalJob, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type PageTags, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type CostsView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { lineDiff } from '../core/diff';
 import { parseTagLines, tagLines } from '../core/page-tags';
 import { knownLanguage, LANGUAGES } from '../core/locale';
@@ -921,6 +921,7 @@ function AgentsBlock({ on }: { on: boolean }) {
         <span className="hint">{a.harness}</span>
         <span className="hint">{a.model}</span>
         <span className="hint">{a.effort}</span>
+        <span className="hint">{a.speed}</span>
         {AGENT_ROLES.map((role) => {
           const setting = view.agents[role];
           // Codex's families by their newest model; a model chosen that the harness no longer offers stays shown
@@ -956,10 +957,18 @@ function AgentsBlock({ on }: { on: boolean }) {
                   </option>
                 ))}
               </select>
+              {setting.harness === 'codex' ? (
+                <select aria-label={`${a.roles[role].name}: ${a.speed}`} value={setting.speed ?? 'normal'} disabled={busy} onChange={(e) => choose(role, { speed: e.target.value as AgentSpeed })}>
+                  {AGENT_SPEEDS.map((speed) => (
+                    <option key={speed} value={speed}>{a.speeds[speed]}</option>
+                  ))}
+                </select>
+              ) : <span className="hint cfg-agent-no-speed" aria-label={a.codexOnly}>—</span>}
             </Fragment>
           );
         })}
       </div>
+      <p className="hint">{a.speedHint}</p>
       {HARNESSES.map((h) => (
         <HarnessUpdate key={h} harness={h} view={view} onView={setView} />
       ))}

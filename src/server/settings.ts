@@ -10,7 +10,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chosenConversationLanguage, chosenLanguage, conversationLanguageIn, OWNER_SETTINGS_FILE as SETTINGS_FILE, ownerLanguageIn, ownerSettingsWritten, systemLanguage } from '../../plugin/skills/demo/lib/language.ts';
 import { type Language, LANGUAGES } from '../core/locale';
-import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, agentDefault, type AgentEffort, type AgentRole, type AgentSetting, type AgentsView, type CostsView, type Harness, HARNESSES, type HarnessView, modelFits, storedModel, type LanguageView, type RemoteSetting, type Theme, THEMES, type ThemeView, type UsageMeterView } from '../core/types';
+import { AGENT_DEFAULTS, AGENT_EFFORTS, AGENT_MODELS, AGENT_ROLES, AGENT_SPEEDS, agentDefault, type AgentEffort, type AgentRole, type AgentSetting, type AgentSpeed, type AgentsView, type CostsView, type Harness, HARNESSES, type HarnessView, modelFits, storedModel, type LanguageView, type RemoteSetting, type Theme, THEMES, type ThemeView, type UsageMeterView } from '../core/types';
 import { BadRequest } from './board';
 
 interface Settings {
@@ -124,7 +124,7 @@ type Chosen = Partial<AgentSetting>;
  * (a model id or `default` written before reads as one).
  */
 function agentsOf(input: unknown): Partial<Record<AgentRole, Chosen>> {
-  const o = { ...((input && typeof input === 'object' ? input : {}) as Record<string, { harness?: unknown; model?: unknown; effort?: unknown } | undefined>) };
+  const o = { ...((input && typeof input === 'object' ? input : {}) as Record<string, { harness?: unknown; model?: unknown; effort?: unknown; speed?: unknown } | undefined>) };
   // the Coordinator's choice, written as `koordinator` (its German name) before it was renamed
   o.coordinator ??= o.koordinator;
   const agents: Partial<Record<AgentRole, Chosen>> = {};
@@ -136,7 +136,8 @@ function agentsOf(input: unknown): Partial<Record<AgentRole, Chosen>> {
     const fits = typeof given === 'string' && modelFits(on, given) ? storedModel(on, given) : undefined;
     const model = fits !== agentDefault(role, on).model ? fits : undefined;
     const effort = AGENT_EFFORTS.find((e) => e === o[role]?.effort && e !== AGENT_DEFAULTS[role].effort);
-    if (harness || model || effort) agents[role] = { ...(harness ? { harness } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}) };
+    const speed = on === 'codex' ? AGENT_SPEEDS.find((s) => s === o[role]?.speed && s !== 'normal') : undefined;
+    if (harness || model || effort || speed) agents[role] = { ...(harness ? { harness } : {}), ...(model ? { model } : {}), ...(effort ? { effort } : {}), ...(speed ? { speed } : {}) };
   }
   return agents;
 }
@@ -152,7 +153,7 @@ export function agentSetting(home: string, role: AgentRole, fallback: Harness = 
   const preset = agentDefault(role, harness);
   // a model chosen is one of the harness chosen with it, Claude Code's where none was
   const model = chosen.model && (chosen.harness ?? AGENT_DEFAULTS[role].harness) === harness && modelFits(harness, chosen.model) ? storedModel(harness, chosen.model) : preset.model;
-  return { harness, model, effort: chosen.effort ?? preset.effort };
+  return { harness, model, effort: chosen.effort ?? preset.effort, ...(harness === 'codex' && chosen.speed ? { speed: chosen.speed } : {}) };
 }
 
 /** Each group's setting, with the harnesses this machine has (`Harnesses.view`). */
@@ -173,18 +174,20 @@ export function saveAgents(home: string, input: unknown, harnesses: HarnessView[
   for (const [role, choice] of Object.entries(given)) {
     if (!AGENT_ROLES.some((r) => r === role)) throw new BadRequest('invalid', `agents are one of ${AGENT_ROLES.join(', ')}`);
     const r = role as AgentRole;
-    const { harness, model, effort, ...other } = (choice && typeof choice === 'object' ? choice : {}) as Record<string, unknown>;
-    if (Object.keys(other).length) throw new BadRequest('invalid', 'a choice has a harness, a model and an effort');
+    const { harness, model, effort, speed, ...other } = (choice && typeof choice === 'object' ? choice : {}) as Record<string, unknown>;
+    if (Object.keys(other).length) throw new BadRequest('invalid', 'a choice has a harness, a model, an effort and a speed');
     if (harness !== undefined && !HARNESSES.some((h) => h === harness)) throw new BadRequest('invalid', `harness must be one of ${HARNESSES.join(', ')}`);
     const before = agentSetting(home, r, fallback);
     const on = (harness as Harness | undefined) ?? before.harness;
     if (model !== undefined && (typeof model !== 'string' || !modelFits(on, model))) throw new BadRequest('invalid', on === 'claude' ? `model must be one of ${AGENT_MODELS.join(', ')}` : 'model must be a Codex model family or id');
     if (effort !== undefined && !AGENT_EFFORTS.some((e) => e === effort)) throw new BadRequest('invalid', `effort must be one of ${AGENT_EFFORTS.join(', ')}`);
+    if (speed !== undefined && !AGENT_SPEEDS.some((s) => s === speed)) throw new BadRequest('invalid', `speed must be one of ${AGENT_SPEEDS.join(', ')}`);
+    if (speed !== undefined && on !== 'codex') throw new BadRequest('invalid', 'speed is only available for Codex');
     // another harness starts from its own default model
     const next = model !== undefined ? storedModel(on, model as string) : on === before.harness ? before.model : agentDefault(r, on).model;
     // the harness is kept once chosen, or where the group runs on another than the preset's
     const keep = harness !== undefined || settings.agents?.[r]?.harness !== undefined || on !== AGENT_DEFAULTS[r].harness;
-    agents[r] = { ...(keep ? { harness: on } : {}), model: next as string, effort: (effort as AgentEffort | undefined) ?? before.effort };
+    agents[r] = { ...(keep ? { harness: on } : {}), model: next as string, effort: (effort as AgentEffort | undefined) ?? before.effort, ...(on === 'codex' ? { speed: (speed as AgentSpeed | undefined) ?? before.speed } : {}) };
   }
   write(home, { ...settings, agents: agentsOf(agents) });
   console.log(`Obeya: harness, model and effort of the agents saved to ${join(home, SETTINGS_FILE)}`);

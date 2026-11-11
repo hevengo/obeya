@@ -626,6 +626,8 @@ class CodexSession implements AgentSession {
     const settings = {
       cwd,
       model,
+      // Explicit standard routing also overrides a faster tier in Codex's own config or a resumed thread.
+      serviceTier: spec.speed === 'fast' ? 'priority' : spec.speed === 'ultrafast' ? 'ultrafast' : 'default',
       approvalPolicy: spec.readOnly ? 'never' : 'on-request',
       ...(spec.readOnly ? {} : { approvalsReviewer: 'auto_review' }),
       sandbox: spec.readOnly ? 'read-only' : 'workspace-write',

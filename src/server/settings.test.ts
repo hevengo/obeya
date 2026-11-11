@@ -188,6 +188,55 @@ test("an agent with a harness, model or effort of its own (a card's) starts on t
   expect(fake.last.spec).toMatchObject({ harness: 'codex', model: 'gpt-#-sol', effort: 'medium' });
 });
 
+test('Codex speed saves per group, defaults to normal, survives other edits and clears when leaving Codex', () => {
+  const home = scratchHome();
+  expect(agentSetting(home, 'worker', 'codex').speed ?? 'normal').toBe('normal');
+  saveLanguage(home, { language: 'en' });
+  saveAgents(home, { worker: { harness: 'codex', speed: 'fast' }, chores: { harness: 'codex', speed: 'ultrafast' } });
+  saveAgents(home, { worker: { effort: 'max', model: 'gpt-#-terra' } });
+  expect(agentsView(home).agents.worker).toEqual({ harness: 'codex', model: 'gpt-#-terra', effort: 'max', speed: 'fast' });
+  expect(agentSetting(home, 'chores').speed).toBe('ultrafast');
+  expect(JSON.parse(readFileSync(join(home, SETTINGS_FILE), 'utf8')).language).toBe('en');
+  saveAgents(home, { worker: { speed: 'ultrafast' } });
+  expect(agentSetting(home, 'worker').speed).toBe('ultrafast');
+  saveAgents(home, { worker: { speed: 'normal' } });
+  expect(JSON.parse(readFileSync(join(home, SETTINGS_FILE), 'utf8')).agents.worker.speed).toBeUndefined();
+  expect(agentSetting(home, 'worker').speed ?? 'normal').toBe('normal');
+  saveAgents(home, { worker: { speed: 'fast' } });
+  saveAgents(home, { worker: { harness: 'claude' } });
+  expect(agentSetting(home, 'worker').speed).toBeUndefined();
+  saveAgents(home, { worker: { harness: 'codex' } });
+  expect(agentSetting(home, 'worker').speed ?? 'normal').toBe('normal');
+  // the Codex-only fallback stores the harness with a speed-only edit, too
+  saveAgents(home, { explorer: { speed: 'fast' } }, [], 'codex');
+  expect(agentSetting(home, 'explorer').speed).toBe('fast');
+  for (const speed of ['turbo', null, 3]) expect(() => saveAgents(home, { worker: { speed } })).toThrow('speed must be one of');
+  expect(() => saveAgents(home, { coordinator: { speed: 'fast' } })).toThrow('speed is only available for Codex');
+  writeFileSync(join(home, SETTINGS_FILE), JSON.stringify({ agents: { worker: { harness: 'codex', speed: 'turbo' } } }));
+  expect(agentSetting(home, 'worker').speed ?? 'normal').toBe('normal');
+});
+
+test('the runtime passes group speed to Codex, including cards, hosts and resumed sessions, while running agents keep theirs', () => {
+  const fake = new FakeRuntime();
+  let worker: AgentSetting = { harness: 'codex', model: 'gpt-#-sol', effort: 'high', speed: 'fast' };
+  const runtime = withAgentSetting(fake, () => worker);
+  const spec = { cwd: '/r', system: '', tools: [], onEvent: () => {}, role: 'worker' as const };
+  runtime.start(spec);
+  const running = fake.last;
+  expect(running.spec.speed).toBe('fast');
+  worker = { ...worker, speed: 'ultrafast' };
+  runtime.start({ ...spec, cwd: 'ssh://build-box/r', resume: 'codex:thread-1', agent: { model: 'gpt-#-terra', harness: 'codex' } });
+  expect(fake.last.spec).toMatchObject({ harness: 'codex', model: 'gpt-#-terra', speed: 'ultrafast' });
+  expect(running.spec.speed).toBe('fast');
+  runtime.start({ ...spec, agent: { harness: 'claude', model: 'opus' } });
+  expect(fake.last.spec.speed).toBeUndefined();
+  runtime.start({ ...spec, resume: 'claude-session' });
+  expect(fake.last.spec.speed).toBeUndefined();
+  worker = { harness: 'claude', model: 'opus', effort: 'high' };
+  runtime.start({ ...spec, resume: 'codex:thread-1' });
+  expect(fake.last.spec.speed ?? 'normal').toBe('normal');
+});
+
 test('byHarness starts each agent on the runtime of the harness its spec names, Claude Code where it names none', () => {
   const claude = new FakeRuntime();
   const codex = new FakeRuntime();
