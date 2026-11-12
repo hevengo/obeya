@@ -237,6 +237,28 @@ test('the runtime passes group speed to Codex, including cards, hosts and resume
   expect(fake.last.spec.speed ?? 'normal').toBe('normal');
 });
 
+test("a card's Codex speed overrides its group on start and resume", () => {
+  const fake = new FakeRuntime();
+  let group: AgentSetting = { harness: 'codex', model: 'gpt-#-sol', effort: 'high', speed: 'fast' };
+  const runtime = withAgentSetting(fake, () => group);
+  const spec = { cwd: '/r', system: '', tools: [], onEvent: () => {}, role: 'worker' as const };
+  for (const speed of ['normal', 'fast', 'ultrafast'] as const) {
+    for (const resume of [undefined, 'codex:thread-1']) {
+      runtime.start({ ...spec, resume, agent: { speed } });
+      expect(fake.last.spec.speed).toBe(speed);
+    }
+  }
+  runtime.start({ ...spec, agent: { effort: 'low', speed: 'ultrafast' } });
+  expect(fake.last.spec).toMatchObject({ effort: 'low', speed: 'ultrafast' });
+  group = { harness: 'claude', model: 'opus', effort: 'high' };
+  runtime.start({ ...spec, agent: { harness: 'codex', model: 'gpt-#-terra', speed: 'fast' } });
+  expect(fake.last.spec).toMatchObject({ harness: 'codex', model: 'gpt-#-terra', speed: 'fast' });
+  runtime.start({ ...spec, resume: 'codex:thread-1', agent: { speed: 'ultrafast' } });
+  expect(fake.last.spec.speed).toBe('ultrafast');
+  runtime.start({ ...spec, agent: { speed: 'ultrafast' } });
+  expect(fake.last.spec.speed).toBeUndefined();
+});
+
 test('byHarness starts each agent on the runtime of the harness its spec names, Claude Code where it names none', () => {
   const claude = new FakeRuntime();
   const codex = new FakeRuntime();

@@ -259,12 +259,13 @@ const de = {
   /** Beside the button that starts a card: what its agent runs on, the workers' group's unless chosen for this card. */
   agentPick: {
     /** The narrow part beside the start button that opens the menu. */
-    hint: 'Harness, Modell und Effort nur für diese Karte wählen',
+    hint: 'Harness, Modell, Effort und Geschwindigkeit nur für diese Karte wählen',
     /** Beside it while the card has a choice of its own. */
     chosenHint: 'Gilt nur für diese Karte, für jede Sitzung ihres Laufs. Ändern im Menü daneben.',
     effort: 'Effort',
     /** The effort chosen, beside the harness and model in the line beside the button. */
     chosenEffort: (effort: string) => `Effort ${effort}`,
+    chosenSpeed: (speed: string) => `Geschwindigkeit ${speed}`,
   },
   /** A newer version of a harness (`name`: Claude Code, Codex) that is out, in a card's menu of models and in the Configuration's agents. */
   harnessUpdate: {
@@ -2533,10 +2534,11 @@ const en: Strings = {
   start: 'Start agent',
   startHint: 'An agent starts on a branch of its own and shows a demo at the end.',
   agentPick: {
-    hint: 'Choose harness, model and effort for this card alone',
+    hint: 'Choose harness, model, effort and speed for this card alone',
     chosenHint: 'Holds for this card alone, for every session of its run. Change it in the menu beside.',
     effort: 'Effort',
     chosenEffort: (effort: string) => `effort ${effort}`,
+    chosenSpeed: (speed: string) => `speed ${speed}`,
   },
   harnessUpdate: {
     out: (name: string, version: string, host?: string, now?: string) => (host ? `${name} ${version} is out, ${host} has ${now}` : `${name} ${version} is out`),

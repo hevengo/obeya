@@ -79,7 +79,9 @@ import {
   type Notice,
   type WorkerTurn,
   AGENT_EFFORTS,
+  AGENT_SPEEDS,
   type AgentEffort,
+  type AgentSpeed,
   type Harness,
   HARNESSES,
   modelFits,
@@ -1743,7 +1745,7 @@ export class Board {
   }
 
   /**
-   * The harness, model and effort the card's agent runs on, over the workers' group's (`null`: the
+   * The harness, model, effort and speed the card's agent runs on, over the workers' group's (`null`: the
    * group's again), for each session of its next run. A session keeps what it started on, so the choice
    * changes only while the card waits to start (planned, or proposed).
    */
@@ -1754,16 +1756,17 @@ export class Board {
     if (card?.state !== 'planned' && card?.state !== 'proposal') throw new BadRequest('agentStarted', 'the card is at work or done: its agent keeps its harness and model');
     let chosen: CardAgent | null = null;
     if (agent !== null) {
-      const { harness, model, effort, ...other } = (agent && typeof agent === 'object' ? agent : {}) as Record<string, unknown>;
+      const { harness, model, effort, speed, ...other } = (agent && typeof agent === 'object' ? agent : {}) as Record<string, unknown>;
       const both = harness !== undefined || model !== undefined;
       if (
         Object.keys(other).length ||
         (both && (!HARNESSES.some((h) => h === harness) || typeof model !== 'string' || !modelFits(harness as Harness, model))) ||
         (effort !== undefined && !AGENT_EFFORTS.some((e) => e === effort)) ||
-        (!both && effort === undefined)
+        (speed !== undefined && (!AGENT_SPEEDS.some((s) => s === speed) || harness === 'claude')) ||
+        (!both && effort === undefined && speed === undefined)
       )
-        throw new BadRequest('invalid', 'agent must be a harness with a model it takes, an effort, or both');
-      chosen = { ...(both ? { harness: harness as Harness, model: storedModel(harness as Harness, model as string) } : {}), ...(effort !== undefined ? { effort: effort as AgentEffort } : {}) };
+        throw new BadRequest('invalid', 'agent must be a harness with a model it takes, an effort, and/or a Codex speed');
+      chosen = { ...(both ? { harness: harness as Harness, model: storedModel(harness as Harness, model as string) } : {}), ...(effort !== undefined ? { effort: effort as AgentEffort } : {}), ...(speed !== undefined ? { speed: speed as AgentSpeed } : {}) };
     }
     this.store.update(id, { agent: chosen && JSON.stringify(chosen) });
     this.changed();

@@ -523,7 +523,7 @@ export interface Item {
    * the owner has costs shown (`CostsView`).
    */
   spent?: number;
-  /** The harness, model and effort the owner chose for this card's agent, over its group's (`CardAgent`); absent: the group's. */
+  /** The harness, model, effort and speed the owner chose for this card's agent, over its group's (`CardAgent`); absent: the group's. */
   agent?: CardAgent;
   /** Waiting for approval, its branch holds no change (checked at the handover): approving makes the card `done`. */
   noChange?: boolean;
@@ -2635,12 +2635,14 @@ export interface AgentSetting {
 }
 /**
  * What the owner chose for one card's agent, over the workers' group's (`Item.agent`): a harness with
- * a model (`model` as in `AgentSetting`), an effort, or both; what is left out is the group's.
+ * a model (`model` as in `AgentSetting`), an effort and/or speed; what is left out is the group's.
  */
 export interface CardAgent {
   harness?: Harness;
   model?: string;
   effort?: AgentEffort;
+  /** Overrides the group on Codex, including an explicit normal speed. */
+  speed?: AgentSpeed;
 }
 /** A Codex model as a setting may name it: a family (`gpt-#-sol`, one `#` where the version was), or a model id Codex lists (`gpt-6.1-sol`), read as its family. */
 export const CODEX_MODEL = /^(?=[^#]*#?[^#]*$)(?!#$)[A-Za-z0-9#][\w.:#-]{0,79}$/;

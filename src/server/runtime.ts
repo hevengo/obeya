@@ -178,7 +178,7 @@ export const sessionHarness = (session: string): Harness => (session.startsWith(
 
 /**
  * A runtime that starts each agent of a group on its group's harness, model and effort
- * (`agentSetting`), asked at every start, or on the harness and model and the effort chosen for that
+ * (`agentSetting`), asked at every start, or on the harness, model, effort and speed chosen for that
  * agent alone (a card's), each where it names one. Claude Code's default model is no model given;
  * a Codex agent always gets a family (`codexFamily`), which its session resolves to a model. A session
  * resumed stays on the harness it began on, with that harness's preset model if the choice has
@@ -192,7 +192,8 @@ export function withAgentSetting(runtime: AgentRuntime, setting: (role: AgentRol
       const own = spec.agent;
       const chosen: AgentSetting = { ...group, ...(own?.harness && own.model ? { harness: own.harness, model: own.model } : {}), ...(own?.effort ? { effort: own.effort } : {}) };
       const on: Harness = spec.resume ? sessionHarness(spec.resume) : chosen.harness;
-      const { harness, model, effort, speed } = on === chosen.harness ? chosen : { ...agentDefault(spec.role, on), effort: chosen.effort };
+      const { harness, model, effort } = on === chosen.harness ? chosen : { ...agentDefault(spec.role, on), effort: chosen.effort };
+      const speed = own?.speed ?? (on === chosen.harness ? chosen.speed : undefined);
       const { model: _, agent: __, speed: ___, ...rest } = spec;
       const given = storedModel(harness, model);
       return runtime.start({ ...rest, harness, effort, ...(given === 'default' ? {} : { model: given }), ...(harness === 'codex' && speed ? { speed } : {}) }, firstMessage, images);
