@@ -14,9 +14,9 @@ alike, beside the behaviour demo, and is off until a repository enables it.
 
 ## Where it stands
 
-The demo skill in `plugin/skills/demo/` already scripts scenes, synthesises narration and records
+The demo skill in `plugin/skills/demo/` scripts scenes, synthesises narration and records
 a headless browser into a video with chapters and captions. Its instructions cover behaviour
-only. A handover accepts one video or HTML artifact; the card's change list opens it in the same
+demos and standalone code videos. A handover accepts one video or HTML artifact; the card's change list opens it in the same
 area as changed files. Comments on a paused video reach the worker with the chapter, narration's
 sentence and frame. Repository settings currently give `demo` a language and a sharing site.
 
@@ -40,7 +40,8 @@ W1 now supplies the supported `lib/change-view.ts` API and four measured views, 
 validation and narration-part lighting in the director. Structure supports up to three lanes,
 three ordered boxes per lane and ten selected arrows; fit may refuse earlier for long text or
 crowded routes. Its API reference is `plugin/skills/demo/change-view.md`. The prototype files are
-removed. Skill-mode guidance, settings and handovers remain W2–W4.
+removed. W2 supplies the separate code-video recipe and a runnable example using a temporary
+git repository, without an app or Obeya. Repository settings and handovers remain W3–W4.
 
 ## Design
 
@@ -174,7 +175,7 @@ rules. Keep work sequential where the skill, director, settings or handover code
   clearance, overflow refusal, lighting and existing demo compatibility. Done when a video of a
   landed change can be scripted with lanes, ordered boxes and labelled arrows without any manual
   placement or highlight timing, and its video is legible in the card's player and enlarged.
-- [ ] **W2:** Code-video mode in the demo skill. After W1, write its instructions and an example
+- [x] **W2:** Code-video mode in the demo skill. After W1, write its instructions and an example
   script: purpose, design level, narration order, evidence limits, principles as a lens, fact
   before reason, named inferred boundaries, and the short form defined above. Keep behaviour-demo
   guidance scoped to that mode, so its current instruction to omit code does not block the new

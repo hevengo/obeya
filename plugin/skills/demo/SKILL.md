@@ -1,6 +1,6 @@
 ---
 name: demo
-description: Present finished work to the owner as a narrated screen recording with a one-page report (what it does, what the owner needs to know beyond the video, an open question when there is one), so they can approve or give feedback without reading code or clicking through the app. Typically at the end of an implementation session, for the uncommitted and/or unpushed changes; also for any named commit or branch. Use when they ask for a demo, a walkthrough, or /demo.
+description: Present finished work as a narrated behaviour demo or a design-level code video, with a one-page report. Behaviour demos show the app; code videos explain a git change's structure, boundaries and patterns without running it. Use for a demo, code video, walkthrough or /demo, for own work or an explicit commit, range or branch.
 ---
 
 # /demo — present a change like a team lead presents to a director
@@ -9,6 +9,21 @@ The owner works at the level of a director with a large team: they do not define
 criteria, read diffs, or click through the app. They want to *see* the change, in the shortest
 complete way, and then approve it or give feedback. The output is a local page with a narrated
 video (30 s to 3 min, by the size of the change) and a short report.
+
+## Choose the mode
+
+- **Behaviour demo** (the default): show what the change does for its user. Follow sections 1–7
+  below, with the running app and the existing `example/demo.ts` recipe.
+- **Code video**: explain the design of the change so the owner can judge its code quality.
+  Read [code-video.md](code-video.md) and follow that recipe, with `example/code-video.ts` and
+  the [change-view API](change-view.md). It records a local git-backed page; no app or Obeya
+  server is needed. Sections 5–7 below supply the shared rendering, review and feedback steps.
+
+The two videos serve different decisions. When both are requested, make the behaviour demo
+first and keep the code tour in its own directory. The app-only guidance in sections 1–4,
+including omitting implementation details and finding a running inspection view, applies to
+behaviour demos. Machine setup, narration language, voice, captions and report conventions
+apply to both modes. A code video can be requested directly without a repository opt-in.
 
 ## 1. Scope — what is "the change"
 
@@ -199,7 +214,7 @@ another number is refused), then render again. After a change to a `say`, the re
 translation it makes stale aside (`<language>.stale.json`) and asks for it anew.
 
 Before the first render, once the scenes are scripted, run `node demo.ts --dry`: it runs `login`,
-`open` and every scene against the running app as a render would, without narration, video or
+`open` and every scene against the recording page as a render would, without narration, video or
 waiting for the voice, and ends with a line per scene or with the first one that failed. A scene
 waiting for a state that never comes fails there in seconds, not after synthesis and the scenes
 before it. This matters most for a state an outside trigger brings about (a limit at a proxy, a
@@ -246,9 +261,15 @@ the locator it waited for.
 - `review/NN-mid.jpg` and `review/NN.jpg`: a still from the middle and from the end of each
   scene. Look at all of them: is the thing being talked about on screen, ringed, legible, and
   does nothing show that the narration leaves out? Pull
-  further frames only for fast transitions (`ffmpeg -ss <t> -i demo.mp4 -frames:v 1 x.png`).
+  further frames for fast transitions (`ffmpeg -ss <t> -i demo.mp4 -frames:v 1 x.png`).
 - A warning that the screencast frames are smaller than the viewport means part of the page is
   missing from the video.
+
+For a code video, also watch the **whole video**, with captions, at the card's player size and
+enlarged. Read every diagram, panel and excerpt at its actual pace; confirm every sentence is
+complete and every lighting change follows the thing being spoken about. Check each claim
+against the pinned source and repository prose, including reasons, precedents and inferred
+boundaries. Stills and a passing dry run do not replace this review.
 
 Iterate until it is clean.
 

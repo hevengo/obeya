@@ -48,7 +48,38 @@ and the demand for a demo at `ready_for_review` name the skill as the session li
 of its `SKILL.md` for a session that does not know it. At start, Obeya logs a warning when the
 plugin's manifest or the demo skill is missing.
 
-### Git-backed change views
+### Code videos and git-backed change views
+
+The demo skill has two modes. A behaviour demo shows the running app using its normal recipe.
+A code video explains a change's design so the owner can judge its quality: domains and layers,
+module roles and dependencies, not a line-by-line diff. It can be requested directly, including
+without Obeya. When both are requested the worker makes the behaviour demo first and keeps each
+video in its own directory. The behaviour recipe's omission of code and requirement for an
+app view apply to that mode alone.
+
+The worker reads the repository's instructions and relevant design chapters, along with any
+code-review prose supplied for the task or in the repository's settings. These supply the lens
+and the names for domains and boundaries. Principles such as YAGNI, DRY, KISS, WET (up to two
+similar implementations before an abstraction) and least astonishment are a lens, not chapters
+or a required checklist. A principle is named only where it helps explain this change; the
+worker presents facts, reasons and trade-offs, leaving the judgment to the owner.
+
+A normal tour lasts 1–3 minutes and goes from where the change sits and the path through its
+layers, to what each side of a boundary knows and new dependencies, to chosen patterns with
+alternatives, reasons and existing precedents at named source locations. Design observations
+follow: the fact first, then the reason and trade-off with its location, or one sentence saying
+nothing stands out. A recap closes the tour. The structure view carries most of the explanation;
+at most three evidence scenes show excerpts where a claim needs proof. Inferred boundaries are
+named as inferred in both picture and narration; an inferred reason is distinguished from a
+documented one. A prototype's short form takes 30–60 seconds to show the approach, structure,
+what would carry into a build on the branch and what is a shortcut.
+
+The tour pins explicit git endpoints: a commit and its parent, a supplied range's endpoints,
+or a branch's merge base with its target and its head. Own work covers the whole card change.
+Uncommitted work needs a committed snapshot, in the authorized workflow or a separate temporary
+repository with its provenance stated; it is never silently omitted. Source supports claims
+about design, not proof of runtime behaviour or performance. Missing evidence, a missing
+precedent and source outside the selected change are named as such.
 
 The director also records a local page built from explicit git base and head revisions, without
 an application running. Its structure view takes lanes with boxes in path order and labelled
@@ -78,6 +109,13 @@ clock starts. Lighting replaces the preceding part's
 and follows the same heard speech or silent reading times as captions, including translated
 tracks. Existing scenes with one narration string, app-demo pointers, chapters and captions
 continue through the same pipeline.
+
+Before handing over a code video, the worker watches the whole video with captions at the card's
+player size and enlarged, checking legibility, complete narration, correctly timed lighting and
+claims supported by the pinned source and repository prose. A dry run and review stills help
+find faults but do not replace watching it. The standalone example makes a complete tour from a
+temporary git repository with its own design prose, using the normal voice, caption and chapter
+pipeline without an app or Obeya; see [demo setup](../demo-setup.md#code-videos-without-an-app).
 
 ### The demo settings and voices
 
@@ -360,7 +398,7 @@ voice itself but asks the owner for system software. The machine setup guide is
 
 ### Recording a demo
 
-How to run a project's app, for a demo too, is its settings' `app.run` (see Repository settings);
+For a behaviour demo, how to run a project's app is its settings' `app.run` (see Repository settings);
 without Obeya the skill prints it for the repository it runs in. The worker records once the change is committed and checked, and hands over the directory and
 chapter titles with `ready_for_review`. For Obeya itself the app is a scratch instance from the
 worktree, staged by `scripts/scratch-obeya.ts` from a stage file before every take, its workers idle
@@ -374,6 +412,7 @@ that agent's own tools for it, so the page sees it as from a real agent. A stage
 copy, so a take never changes the stage's files.
 
 Before the first render the worker runs a dry run (`node demo.ts --dry`): the scenes against the app
+or the code video's local page
 without narration or recording, so a scene that waits for a state that never comes fails before
 synthesis. A failing step names the page's URL, the screenshot and Playwright's message on lines of
 their own. A call into the page with no answer within 20 s fails its step, as does a screencast that
