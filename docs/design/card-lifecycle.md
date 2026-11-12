@@ -90,14 +90,19 @@ and records the demo.
 ### Waiting for approval
 
 `waiting: demo`: the card carries the demo (see The demo on the card); the owner approves or gives
-feedback. Whatever the owner writes or says on the card goes to the worker at once, and the work
+feedback. With a repository's `demo.code` enabled, a code-changing task also brings a private code
+video before its initial handover can be accepted; docs-only changes are exempt (see Code videos
+and git-backed change views). `ready_for_review` accepts it as `code_video`, a directory with
+`demo.mp4`, captions and chapter titles in order. A later handover may retain either video
+independently. Both can be watched and commented on before approval. Whatever the owner writes or
+says on the card goes to the worker at once, and the work
 still waits for approval: while the worker takes the words in, the card is at work ("Agent works
 on your message", not counted as needing the owner), "Approve" stays, and a change the words
 call for comes as a new handover. Words asking Obeya for something (gib frei, a follow-up) the worker
 passes on with `to_obeya`.
 
-When the turn ends, the card is the owner's again. Without a new demo it reads "Agent
-answered, waiting for you" instead of "Demo ready"; a new demo reads "Demo ready" again. Only
+When the turn ends, the card is the owner's again. Without a new behaviour or code video it reads "Agent
+answered, waiting for you" instead of "Demo ready"; a new video reads "Demo ready" again. Only
 words for the owner count as an answer (a reply, what the worker says, Obeya's result of
 `to_obeya`), from this turn; an answer to earlier words does not count. A turn that ends without any
 (an error, the session ended) leaves the card at "Demo ready", and the conversation says the agent

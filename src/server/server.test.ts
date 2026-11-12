@@ -206,6 +206,27 @@ describe('who may', () => {
     rmSync(demo.dir, { recursive: true, force: true });
   });
 
+  test('both code-video versions serve ranges and captions only through the owner API', async () => {
+    const c = card();
+    const paths = [join(dir, 'code-old'), join(dir, 'code-new')];
+    for (const [i, path] of paths.entries()) {
+      mkdirSync(path);
+      writeFileSync(join(path, 'demo.mp4'), `code-video-${i}`);
+      writeFileSync(join(path, 'captions.en.vtt'), `WEBVTT\ncode-${i}`);
+      writeFileSync(join(path, 'secret.ts'), 'not a player asset');
+    }
+    board.work(c.id, { code_video: JSON.stringify({ kind: 'video', dir: paths[1], chapters: [] }), code_videos: JSON.stringify([{ kind: 'video', dir: paths[0], chapters: [] }]) });
+    const latest = api(`/cards/${c.id}/code-video/demo.mp4`);
+    const range = await at(latest, { range: 'bytes=0-3' });
+    expect(range.status).toBe(206);
+    expect(await range.text()).toBe('code');
+    expect(await (await at(api(`/cards/${c.id}/code-video/captions.en.vtt`), {})).text()).toContain('code-1');
+    expect(await (await at(api(`/cards/${c.id}/code-videos/0/demo.mp4`), {})).text()).toBe('code-video-0');
+    expect((await at(api(`/cards/${c.id}/code-videos/1/demo.mp4`), {})).status).toBe(404);
+    expect((await at(api(`/cards/${c.id}/code-video/secret.ts`), {})).status).toBe(404);
+    expect((await globalThis.fetch(new URL(latest, server.url))).status).toBe(401);
+  });
+
   test('a demo a later handover replaced is served beside the latest, each from its own directory', async () => {
     const c = card();
     const [earlier, latest] = [artifact(), artifact()];

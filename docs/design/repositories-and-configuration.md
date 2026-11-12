@@ -233,13 +233,17 @@ the configuration dialog, which also holds the main branch. The reference for ev
 `docs/settings.md`, linked from the README.
 
 The fields: `land`, `direct`, `autoMerge`, `checks`, `setup`, `planDocs`, `softPaths`, `workspaces`,
-`prNoise`, `language` (see Language), `app` (`run`, `stop`, `keep`) and `demo` (`language`, `site`:
+`prNoise`, `language` (see Language), `app` (`run`, `stop`, `keep`) and `demo` (`language`, `code`, `site`:
 see Static sites). Only what Obeya itself acts on is a command: `stop` and `keep` park a waiting card
 (see Parking). `run` is prose, for any kind of app (a web app, a CLI, a desktop or mobile app):
 every worker's brief has it word for word. Obeya neither starts the app nor looks for its address;
 the agents do, and a worker reports the address once the app runs (see Trying the app by hand). Each
 field of `app` and `demo` is a setting of its own, so this machine may set `app.stop` and leave
-`app.run` to the repository.
+`app.run` to the repository. `demo.code` is optional prose enabling a private code
+walkthrough, with the owner's lens for architecture, boundaries and patterns. "Code video" in
+Configuration edits it on this machine and can take it over for everyone; blank disables it even
+when the repository enables it. The task worker receives the prose with its brief. See Code videos
+and git-backed change views for the handover rules.
 
 Precedence, highest first: this machine's values, `.obeya/settings.json`, detection (main branch,
 landing), Obeya's defaults (which cover any repository with `docs/plan/`). The dialog shows each value

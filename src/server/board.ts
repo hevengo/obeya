@@ -333,14 +333,14 @@ export type StoredDemo = Demo & { dir: string; kept?: string };
 /** A demo as the UI gets it: without its directories, and saying whether a video has a poster. */
 const shownDemo = ({ dir, kept: _, ...d }: StoredDemo): Demo => (d.kind !== 'html' && !existsSync(join(dir, 'poster.jpg')) ? { ...d, noPoster: true } : d);
 
-const storedDemos = (r: CardRow): StoredDemo[] => (r.demos ? (JSON.parse(r.demos) as StoredDemo[]) : []);
+const storedDemos = (r: Pick<CardRow, 'demos'>): StoredDemo[] => (r.demos ? (JSON.parse(r.demos) as StoredDemo[]) : []);
 
 /**
  * The card's earlier demos the owner can still go back to: their files are on disk (demos are
  * deleted to free space) and no later demo was rendered into the same directory over them, as it
  * was for one from before Obeya kept copies (`StoredDemo`).
  */
-function earlierDemos(r: CardRow): EarlierDemo[] {
+function earlierDemos(r: Pick<CardRow, 'demo' | 'demos'>): EarlierDemo[] {
   const all = storedDemos(r);
   const later = (i: number) => [...all.slice(i + 1).map((d) => d.dir), ...(r.demo ? [(JSON.parse(r.demo) as StoredDemo).dir] : [])];
   return all.flatMap((d, n) => (!later(n).includes(d.dir) && existsSync(join(d.dir, d.kind === 'html' ? 'index.html' : 'demo.mp4')) ? [{ ...shownDemo(d), n }] : []));
@@ -878,9 +878,10 @@ export class Board {
   }
 
   /** The directory and kind of the card's latest demo, or of the `n`th of its earlier ones; it stays with the card after approval. */
-  demoFiles(id: string, n?: number): { dir: string; kind: DemoKind } | null {
+  demoFiles(id: string, n?: number, video: 'demo' | 'code' = 'demo'): { dir: string; kind: DemoKind } | null {
     const r = this.own(id);
-    const stored = n === undefined ? r.demo : storedDemos(r)[n];
+    const current = video === 'code' ? { demo: r.code_video, demos: r.code_videos } : r;
+    const stored = n === undefined ? current.demo : storedDemos(current)[n];
     if (!stored) return null;
     const { dir, kind } = (typeof stored === 'string' ? JSON.parse(stored) : stored) as StoredDemo;
     return { dir, kind };
@@ -3867,6 +3868,8 @@ function work(r: CardRow, themeNow?: ThemeNow): Partial<Item> {
   const detail = r.detail ? (JSON.parse(r.detail) as { question?: Item['question']; summary?: string; noChange?: boolean; lands?: Item['lands']; answering?: boolean; answered?: boolean }) : {};
   const demo = r.demo ? shownDemo(JSON.parse(r.demo) as StoredDemo) : undefined;
   const earlier = demo ? earlierDemos(r) : [];
+  const codeVideo = r.code_video ? shownDemo(JSON.parse(r.code_video) as StoredDemo) : undefined;
+  const codeVideos = codeVideo ? earlierDemos({ demo: r.code_video, demos: r.code_videos }) : [];
   const handed = r.need === 'review' || r.need === 'demo';
   const answering = detail.answering && handed;
   const scope = r.scope ? (JSON.parse(r.scope) as { files: string[] }).files : undefined;
@@ -3894,6 +3897,8 @@ function work(r: CardRow, themeNow?: ThemeNow): Partial<Item> {
     ...(r.approved_at && r.state === 'waiting' && r.need !== 'question' ? { landing: true } : {}),
     ...(demo ? { demo } : {}),
     ...(earlier.length ? { demos: earlier } : {}),
+    ...(codeVideo ? { codeVideo } : {}),
+    ...(codeVideos.length ? { codeVideos } : {}),
     ...(r.files ? { files: JSON.parse(r.files) as CardFile[] } : {}),
     ...(r.change_size ? { changeSize: JSON.parse(r.change_size) as ChangeSize } : {}),
     ...(share ? { share } : {}),

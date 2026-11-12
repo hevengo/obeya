@@ -370,6 +370,10 @@ export interface Item {
   landing?: true;
   /** The demo, when `need` is `demo`; its files are served under `/api/cards/:id/demo/`. */
   demo?: Demo;
+  /** The owner's code walkthrough; kept private, never shared or exported with the behaviour demo. */
+  codeVideo?: Demo;
+  /** Earlier code walkthroughs, with the same history and playback rules as behaviour demos. */
+  codeVideos?: EarlierDemo[];
   /**
    * The demos of earlier handovers a later one replaced, the oldest first, as long as their files
    * are still on disk; each one's files are served under `/api/cards/:id/demos/:n/`.
@@ -946,6 +950,8 @@ export type WorkspaceShortage = 'none' | 'dirty' | 'slots';
  * to look at (design drafts side by side, a layout, an analysis).
  */
 export type DemoKind = 'video' | 'html';
+/** Which of a card's two video histories a timed comment refers to; absent on old comments means demo. */
+export type VideoKind = 'demo' | 'code';
 
 export interface Demo {
   kind: DemoKind;
@@ -1119,6 +1125,7 @@ export function ownWords(e: Pick<CardEvent, 'text' | 'picks'>): string {
 
 /** A place in a card's demo video the owner's words are about, as the worker reads it with them. */
 export interface Spot {
+  video?: VideoKind;
   /** Seconds into the video. */
   at: number;
   /** The chapter playing there. */
@@ -1134,7 +1141,7 @@ export interface Spot {
 }
 
 /** A place in the demo video as the browser sends it with the owner's words: Obeya adds chapter and narration. */
-export type SpotInput = Pick<Spot, 'at' | 'still' | 'demo'>;
+export type SpotInput = Pick<Spot, 'at' | 'still' | 'demo' | 'video'>;
 
 export interface CanvasInfo {
   id: string;
@@ -2050,9 +2057,10 @@ export interface RepoSettings {
    * `site`: the static site Obeya keeps and deploys itself to share demos on (`src/server/site.ts`);
    * without one, "Share" exports a demo as a file. `language`: the language of the repository's
    * demos (narration, captions, report, shared pages) and of its site's overview, over the one of
-   * the demo settings (`demo.json`), which applies without it.
+   * the demo settings (`demo.json`), which applies without it. `code`: prose enabling a private
+   * code walkthrough, and the owner's lens for it; absent or blank leaves it off.
    */
-  demo?: { site?: DemoSite; language?: NarrationLanguage };
+  demo?: { site?: DemoSite; language?: NarrationLanguage; code?: string };
 }
 
 /**
@@ -2069,7 +2077,7 @@ export type CardLanding = Partial<Pick<RepoSettings, 'land' | 'direct'>>;
 export const SHARED_FIELDS = ['land', 'direct', 'autoMerge', 'checks', 'setup', 'planDocs', 'softPaths', 'workspaces', 'prNoise', 'language', 'app', 'demo'] as const satisfies readonly (keyof SharedSettings)[];
 
 /** The settings made of fields that are each set, layered and taken over on their own, and their fields. */
-export const NESTED_SETTINGS = { app: ['run', 'stop', 'keep'], demo: ['site', 'language'] } as const satisfies { [K in keyof RepoSettings]?: readonly (keyof NonNullable<RepoSettings[K]>)[] };
+export const NESTED_SETTINGS = { app: ['run', 'stop', 'keep'], demo: ['site', 'language', 'code'] } as const satisfies { [K in keyof RepoSettings]?: readonly (keyof NonNullable<RepoSettings[K]>)[] };
 export type NestedSetting = keyof typeof NESTED_SETTINGS;
 export const isNested = (field: string): field is NestedSetting => field in NESTED_SETTINGS;
 
@@ -2151,7 +2159,7 @@ export interface RepoValues {
   prNoise: SettingValue<string[]>;
   language: SettingValue<Language>;
   app: { run: SettingValue<string>; stop: SettingValue<string>; keep: SettingValue<string> };
-  demo: { site: SettingValue<DemoSite | null>; language: SettingValue<NarrationLanguage | null> };
+  demo: { site: SettingValue<DemoSite | null>; language: SettingValue<NarrationLanguage | null>; code: SettingValue<string> };
 }
 
 /**

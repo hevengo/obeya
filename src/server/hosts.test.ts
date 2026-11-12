@@ -583,7 +583,14 @@ describe('a worker on a host', () => {
     mkdirSync(demo);
     writeFileSync(join(demo, 'demo.mp4'), 'video');
     writeFileSync(join(demo, 'captions.vtt'), 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nEins.\n');
-    expect(await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: { dir: demo, chapters: ['Eins'] } })).toContain('End your turn');
+    const codeVideo = join(dir, 'far', 'code-video');
+    mkdirSync(codeVideo);
+    writeFileSync(join(codeVideo, 'demo.mp4'), 'private code');
+    writeFileSync(join(codeVideo, 'captions.vtt'), 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nBoundary.\n');
+    expect(await runtime.last.call('ready_for_review', { summary: 'Fertig.', demo: { dir: demo, chapters: ['Eins'] }, code_video: { dir: codeVideo, chapters: ['Boundary'] } })).toContain('End your turn');
+    const codeShown = JSON.parse(board.row(card.id).code_video!) as { dir: string };
+    expect(codeShown.dir).toBe(host.localCopy(codeVideo));
+    expect(readFileSync(join(codeShown.dir, 'demo.mp4'), 'utf8')).toBe('private code');
     const shown = JSON.parse(board.row(card.id).demo!) as { dir: string };
     expect(shown.dir).toBe(host.localCopy(demo));
     expect(readFileSync(join(shown.dir, 'demo.mp4'), 'utf8')).toBe('video');

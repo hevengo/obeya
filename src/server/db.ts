@@ -70,6 +70,9 @@ export interface CardRow {
   demo: string | null;
   /** JSON: the demos of earlier handovers a later one replaced, the oldest first, each as `demo` was; append only. */
   demos: string | null;
+  /** JSON: the private code video and its earlier versions, shaped like demo/demos. */
+  code_video: string | null;
+  code_videos: string | null;
   /** When the owner took the finished card off the canvas into the archive. */
   archived_at: string | null;
   /** JSON: an idea's status and brief (`{ status, brief }`). */
@@ -635,6 +638,7 @@ export const MIGRATIONS = [
   BEGIN
     INSERT INTO archive_changes (canvas_id, card_id) SELECT OLD.canvas_id, value FROM json_each(json_array(OLD.id, OLD.parent_id, OLD.prototype_of)) WHERE value IS NOT NULL;
   END;`,
+  'ALTER TABLE cards ADD COLUMN code_video TEXT; ALTER TABLE cards ADD COLUMN code_videos TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply, forwarded, token';
@@ -678,7 +682,7 @@ export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
  * what its agent reports and hands over. Its place, its group, its folding and the bookkeeping behind
  * it (session, workspace, queue, what was read or heard) do not count.
  */
-const SEEN = new Set<string>(['state', 'need', 'title', 'body', 'status_line', 'detail', 'demo', 'files', 'idea', 'proposal', 'prototype', 'images', 'pr', 'contribution', 'thread', 'shipped', 'landed', 'archived_at', 'paused', 'snoozed', 'share', 'app', 'plan']);
+const SEEN = new Set<string>(['state', 'need', 'title', 'body', 'status_line', 'detail', 'demo', 'code_video', 'files', 'idea', 'proposal', 'prototype', 'images', 'pr', 'contribution', 'thread', 'shipped', 'landed', 'archived_at', 'paused', 'snoozed', 'share', 'app', 'plan']);
 
 /** What `Store.update` may change on a card: all but what is set once at its creation, and its times. */
 export type RowUpdate = Partial<Omit<CardRow, 'id' | 'canvas_id' | 'parent_id' | 'plan_ref' | 'prototype_of' | 'retro' | 'created_at' | 'updated_at' | 'changed_at'>>;

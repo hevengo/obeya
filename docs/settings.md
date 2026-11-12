@@ -172,6 +172,21 @@ page for something to look at; the worker picks which, and runs the app for it a
   Obeya finds it in the repository's `.obeya/settings.json`. A voice that clones a clip uses the
   clip of this language, so each machine's demo settings name one per language.
 
+- `code`: optional prose enabling a second, private video for code-changing tasks. Describe what
+  the owner looks for in patterns, architecture and domain boundaries, and point to the repository's
+  design docs. For example: `"Explain the boundaries in docs/design.md and why each pattern fits.
+  Prefer simple designs without speculative abstraction."` An absent or blank value leaves this off;
+  a blank value on this machine overrides an enabled repository value. Like `app.run`, it is prose
+  passed to the worker, not a command or a list of switches. Configuration shows it as "Code video",
+  and "Take over into the repository for everyone" saves it with the other repository settings.
+
+  An enabled task hands over the behaviour demo or artifact and a separate code video covering the
+  complete card change. Docs-only changes need no code video. After feedback the worker may keep
+  either earlier video independently. The code video uses the same language, voice, captions and
+  chapters, but starts only when played. It stays on the owner's card; shared pages, automatic
+  publishing and exports include only the behaviour demo. Directly requesting a code video with
+  the demo skill works without enabling this setting.
+
 - `site`: a static site Obeya keeps and deploys itself, so that "Share" puts a demo on a page for
   colleagues, for a host that takes a directory (Cloudflare Pages, Netlify, an S3 bucket, a
   directory a web server serves, GitHub Pages). Without a site (or without its credentials on this

@@ -2,7 +2,7 @@
 
 import { createContext, type CSSProperties, Fragment, type ReactNode, type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { agentListens, answering, type ApproveResult, askable, type BackgroundTask, type CardAction, type ChangeRoute, type HeldChanges, chapterAt, type CardEvent, type CardPatch, type Demo, type EarlierDemo, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, type PageTags, openQuestions, pausableNow, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type Finding, type Clash as ClashFound, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor, withSupplemented } from '../core/types';
+import { agentListens, answering, type ApproveResult, askable, type BackgroundTask, type CardAction, type ChangeRoute, type HeldChanges, chapterAt, type CardEvent, type CardPatch, type Demo, type EarlierDemo, type VideoKind, EXPORT_HTML_MAX, finished, finishedArchivable, finishingUp, handedOver, type Item, type Mock, type NextStep, type PageTags, openQuestions, pausableNow, plannableAsProject, type PrComment, type PrReviewEntry, type PullRequest, type Question, type Finding, type Clash as ClashFound, type RepoRef, snoozable, type Spot, started, stopped, stoppedArchivable, taskAuthor, withSupplemented } from '../core/types';
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { languageName, preferredTrack } from '../core/locale';
@@ -14,7 +14,7 @@ import { useCopy } from './copy';
 import { arrivedOnOpenCard, held, markSeen, openedWith, sameDemo, unseen } from './demoSeen';
 import { know } from './known';
 import { Branch } from './diff';
-import { ResultFiles } from './files';
+import { CODE_VIDEO, DEMO, ResultFiles } from './files';
 import { DiscardChanges, FolderBox, FolderLine, useFolderDiff } from './folder';
 import { landedRef, PauseMark, PlayMark, shownTitle } from './parts';
 import { holdsNotes } from '../core/queue';
@@ -565,10 +565,12 @@ export function Detail(p: Props) {
                   onTab={setTab}
                   {...(inFolder ? { diff: changes.diff } : {})}
                   demo={
-                    item.demo && (
+                    item.demo && ((active) => (
                       <DemoView
                         item={item}
-                        demo={item.demo}
+                        demo={item.demo!}
+                        active={active}
+                        onShow={() => setTab(DEMO)}
                         autoplay={demoWaits && !arrived}
                         comments={agentListens(item)}
                         top={
@@ -592,8 +594,11 @@ export function Detail(p: Props) {
                           ))
                         }
                       />
-                    )
+                    ))
                   }
+                  codeVideo={item.codeVideo && ((active) => (
+                    <DemoView item={item} demo={item.codeVideo!} videoKind="code" active={active} onShow={() => setTab(CODE_VIDEO)} autoplay={false} comments={agentListens(item)} />
+                  ))}
                 />
                 {item.pr && (item.state === 'inPr' || item.state === 'waiting') && (
                   <PrBox pr={item.pr} {...(item.contribution?.held && item.state === 'waiting' ? { held: item.contribution.held, author: item.contribution.author, card: item.id } : {})} />
@@ -1828,6 +1833,9 @@ function DemoView({
   top,
   autoplay = true,
   comments = false,
+  videoKind = 'demo',
+  active = true,
+  onShow,
 }: {
   item: Item;
   summary?: string;
@@ -1838,6 +1846,9 @@ function DemoView({
   /** starts by itself when this browser has not played it yet */
   autoplay?: boolean;
   comments?: boolean;
+  videoKind?: VideoKind;
+  active?: boolean;
+  onShow?: () => void;
 }) {
   const cardId = item.id;
   const video = useRef<HTMLVideoElement>(null);
@@ -1851,25 +1862,38 @@ function DemoView({
   const [shape, setShape] = useState<string>();
   // the earlier demo shown (its `n`), or the latest; a new handover leaves the owner where they are
   const [shownN, setShownN] = useState<number | null>(null);
-  const earlier = item.demos ?? [];
+  const earlier = (videoKind === 'code' ? item.codeVideos : item.demos) ?? [];
   const demo = earlier.find((d) => d.n === shownN) ?? latest;
   const all = [...earlier, latest];
   const shownAt = all.indexOf(demo);
+  const historyWords = videoKind === 'code' ? { version: t.demo.codeVersion, older: t.demo.codeOlder, newer: t.demo.codeNewer } : t.demo;
   // a new handover often renders into the same directory: its handover in the address makes a card left open load it afresh
-  const src = (f: string) => cardAt(cardId, `${demo === latest ? `/demo/${f}` : `/demos/${(demo as EarlierDemo).n}/${f}`}${demo.handover === undefined ? '' : `?v=${demo.handover}`}`);
+  const route = videoKind === 'code' ? ['code-video', 'code-videos'] : ['demo', 'demos'];
+  const src = (f: string) => cardAt(cardId, `${demo === latest ? `/${route[0]}/${f}` : `/${route[1]}/${(demo as EarlierDemo).n}/${f}`}${demo.handover === undefined ? '' : `?v=${demo.handover}`}`);
   // where the demo shown next plays from, when a comment on a place in it took the owner there
   const playFrom = useRef<number | null>(null);
   const show = (d: Demo) => setShownN(d === latest ? null : (d as EarlierDemo).n);
   // start once the card has unfolded, like the mock, until it has played once; a demo kept on a finished card waits to be played.
   // A page out of sight (a tab in the background, an agent's browser) does not start it: nobody would see it, only hear it
-  const [autostart] = useState(() => autoplay && demo.kind !== 'html' && !document.hidden && unseen(localStorage, cardId, demo));
+  const [autostart] = useState(() => active && videoKind === 'demo' && autoplay && demo.kind !== 'html' && !document.hidden && unseen(localStorage, cardId, demo));
   // a video that does not start on its own shows a big play button over it until it first plays
   const [started, setStarted] = useState(autostart);
+  const autoPending = useRef(autostart);
   useEffect(() => {
-    if (!autostart) return;
-    const h = setTimeout(() => (document.hidden ? setStarted(false) : video.current?.play().catch(() => setStarted(false))), 300);
+    if (!autoPending.current) return;
+    // Selecting another row before the unfold finishes cancels the automatic start as well.
+    if (!active) {
+      autoPending.current = false;
+      setStarted(false);
+      return;
+    }
+    const h = setTimeout(() => {
+      autoPending.current = false;
+      if (document.hidden) setStarted(false);
+      else video.current?.play().catch(() => setStarted(false));
+    }, 300);
     return () => clearTimeout(h);
-  }, []);
+  }, [active]);
   useEffect(() => () => holdRestart('video', null), []);
   // a later handover on the open card waits behind the play button too, unless the owner is on an earlier demo
   const shownLatest = useRef(latest);
@@ -1907,22 +1931,28 @@ function DemoView({
       setSlot(null);
     };
   }, [demo.kind, shownN, demo.handover, JSON.stringify(demo.chapters), demo.tracks?.join(), demo.silent]);
-  const watching = useWatching(cardId, video, comments && demo.kind !== 'html' ? demo.chapters : null, demo.handover);
+  const watching = useWatching(cardId, video, comments && demo.kind !== 'html' ? demo.chapters : null, demo.handover, videoKind, active);
   const current = chapterAt(demo.chapters, now);
   useEffect(() => {
-    if (!earlier.length) return;
     return showsVersions({
       cardId,
+      videoKind,
+      activate: onShow,
       shown: demo.handover,
       show: (handover, from) => {
-        const d = all.find((d) => d.handover === handover);
+        const d = handover === undefined ? latest : all.find((d) => d.handover === handover);
         if (!d) return false;
-        playFrom.current = from;
-        show(d);
+        if (d === demo && video.current) {
+          video.current.currentTime = from;
+          video.current.play().catch(() => setStarted(false));
+        } else {
+          playFrom.current = from;
+          show(d);
+        }
         return true;
       },
     });
-  }, [demo, latest, item.demos]);
+  }, [demo, latest, item.demos, item.codeVideos, onShow, videoKind]);
   // another demo shown: it starts from the beginning, or from the place a comment took the owner to
   const firstShown = useRef(true);
   useEffect(() => {
@@ -1947,25 +1977,25 @@ function DemoView({
   }, [shownN]);
   return (
     <>
-      <div className="demo-view">
+      <div className="demo-view" data-video-kind={videoKind}>
         {/* which of the card's demos is shown, in the line with sharing */}
         {(earlier.length > 0 || top) && (
           <div className="demo-top">
             {earlier.length > 0 && (
               <div className={demo === latest ? 'demo-versions' : 'demo-versions earlier'} title={demo === latest ? undefined : t.demo.earlierHint}>
-                <button className="step" disabled={shownAt === 0} title={t.demo.older} aria-label={t.demo.older} onClick={() => show(all[shownAt - 1]!)}>
+                <button className="step" disabled={shownAt === 0} title={historyWords.older} aria-label={historyWords.older} onClick={() => show(all[shownAt - 1]!)}>
                   ‹
                 </button>
                 <span>
-                  {t.demo.version(shownAt + 1, all.length, demo === latest)}
+                  {historyWords.version(shownAt + 1, all.length, demo === latest)}
                   {demo.at && ` · ${handedAt(demo.at)}`}
-                  {demo.handover !== undefined && item.share?.on?.includes(demo.handover) && (
+                  {videoKind === 'demo' && demo.handover !== undefined && item.share?.on?.includes(demo.handover) && (
                     <span className="on-page" title={t.share.onPageMark} aria-label={t.share.onPageMark}>
                       <ShareIcon />
                     </span>
                   )}
                 </span>
-                <button className="step" disabled={demo === latest} title={t.demo.newer} aria-label={t.demo.newer} onClick={() => show(all[shownAt + 1]!)}>
+                <button className="step" disabled={demo === latest} title={historyWords.newer} aria-label={historyWords.newer} onClick={() => show(all[shownAt + 1]!)}>
                   ›
                 </button>
                 {shownAt < all.length - 2 && (
@@ -2009,7 +2039,7 @@ function DemoView({
                     holdRestart('video', 'video');
                   }}
                   // played once it runs, not while it still loads after the click: closed before that, it starts at the next opening
-                  onPlaying={() => demo === latest && markSeen(localStorage, cardId, demo)}
+                  onPlaying={() => videoKind === 'demo' && demo === latest && markSeen(localStorage, cardId, demo)}
                   onPause={() => holdRestart('video', null)}
                   onEnded={() => {
                     holdRestart('video', null);
@@ -2148,18 +2178,18 @@ const STOOD_MS = 3 * 60_000;
  * they watch, go to the agent once they have finished: the video ended, stood for a few minutes, or
  * the card closed. Words without a place, and an approval, take them too (on the server).
  */
-function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, chapters: [number, string][] | null, demo?: number) {
+function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, chapters: [number, string][] | null, demo?: number, videoKind: VideoKind = 'demo', active = true) {
   const on = !!chapters;
   const release = () => void api.act(cardId, { action: 'release' }).catch(() => {});
   // going to another of the card's demos is no sign the owner has finished watching
   useEffect(() => {
     const v = video.current;
-    if (!on || !v) return;
-    return watch(cardId, v, chapters, demo);
-  }, [on, demo]);
+    if (!on || !active || !v) return;
+    return watch(cardId, v, chapters, demo, videoKind);
+  }, [on, demo, videoKind, active]);
   useEffect(() => {
     const v = video.current;
-    if (!on || !v) return;
+    if (!on || !active || !v) return;
     const typed = (e: Event) => {
       if (!v.paused && e.target instanceof HTMLTextAreaElement && e.target.closest('.card-sheet .split-talk .composer, #ph-card-talk .composer')) v.pause();
     };
@@ -2177,15 +2207,15 @@ function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, 
       v.removeEventListener('pause', paused);
       v.removeEventListener('play', played);
       removeEventListener('input', typed, true);
-      release();
     };
-  }, [on]);
+  }, [on, active]);
+  useEffect(() => () => { if (on) release(); }, [on]);
   return { ended: () => on && release() };
 }
 
 /** The demo video the keys are for, with several on a card: the zoomed one, else the one playing, else the first. */
 function keyedVideo() {
-  const videos = [...document.querySelectorAll<HTMLVideoElement>('.card-sheet .demo-view video')];
+  const videos = [...document.querySelectorAll<HTMLVideoElement>('.card-sheet .demo-view video')].filter((v) => !v.closest('[hidden]'));
   return document.querySelector<HTMLVideoElement>('.dp.zoomed video') ?? videos.find((v) => !v.paused) ?? videos[0];
 }
 
@@ -3150,7 +3180,7 @@ function PlaceChip({ cardId, place }: { cardId: string; place: Place }) {
     <div className="quote place" title={t.demo.place}>
       <canvas ref={frame} className="place-frame" />
       <span className="place-text">
-        <b>{mmss(place.at)}</b>
+        <b>{place.video === 'code' ? t.files.codeVideo : t.files.demo.video} · {mmss(place.at)}</b>
         {place.chapter && ` · ${place.chapter}`}
       </span>
       <button className="quote-clear" title={t.demo.unplace} aria-label={t.demo.unplace} onMouseDown={(m) => m.preventDefault()} onClick={dismissPlace}>
@@ -3163,10 +3193,10 @@ function PlaceChip({ cardId, place }: { cardId: string; place: Place }) {
 /** Above the owner's words in the conversation: the place in the demo video they are about; a click plays the video from there. */
 function SpotLink({ cardId, spot }: { cardId: string; spot: Spot }) {
   return (
-    <button className="spot" title={t.demo.toPlace} onClick={() => seekTo(cardId, spot.at, spot.demo)}>
+    <button className="spot" title={t.demo.toPlace} onClick={() => seekTo(cardId, spot.at, spot.demo, spot.video)}>
       {spot.still && <img src={imageUrl(spot.still)} alt="" loading="lazy" />}
       <span>
-        ▶ {mmss(spot.at)}
+        ▶ {spot.video === 'code' ? t.files.codeVideo : t.files.demo.video} · {mmss(spot.at)}
         {spot.chapter && ` · ${spot.chapter}`}
       </span>
     </button>

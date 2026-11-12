@@ -96,6 +96,7 @@ narration, correct lighting, and claims supported by the pinned evidence. Re-ren
 
 Keep `demo.mp4`, captions, chapters and `index.html` together. Without Obeya, give the owner the
 local report page and its duration, with any open question or evidence limit. Under Obeya, use
-the handover fields the session exposes for the requested video. Do not replace a requested behaviour demo
+`ready_for_review`'s `code_video: { dir, chapters }` alongside `demo` for the behaviour demo or
+artifact. A later handover can omit either to keep that earlier video. Do not replace a requested behaviour demo
 with a code tour. The code tour stays with its owner; sharing the behaviour demo does not
 authorize sharing source or the code video.

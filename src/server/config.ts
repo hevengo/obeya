@@ -70,7 +70,7 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
   const list = (l?: string[]) => l?.map((x) => x.trim()).filter(Boolean);
   const dir = s.planDocs?.dir.trim().replace(/\/+$/, '');
   const site = tidySite(s.demo?.site);
-  const demo = { ...(site ? { site } : {}), ...(s.demo?.language ? { language: s.demo.language } : {}) };
+  const demo = { ...(site ? { site } : {}), ...(s.demo?.language ? { language: s.demo.language } : {}), ...(s.demo?.code !== undefined ? { code: s.demo.code.trim() } : {}) };
   const app = tidyApp(s.app);
   const out: RepoSettings = {
     ...(s.branch?.trim() ? { branch: s.branch.trim() } : {}),

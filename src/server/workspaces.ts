@@ -610,7 +610,7 @@ export interface CardWorkspaces {
   diff(cardId: string, full: boolean): Promise<CardDiff | null>;
   landedDiff(base: string, commit: string, full: boolean): Promise<CardDiff | null>;
   fileOf(cardId: string, path: string, ref?: string, local?: boolean): Promise<FileAt | null>;
-  changedFiles(cardId: string, landed?: { base: string; commit: string }): Promise<string[]>;
+  changedFiles(cardId: string, landed?: { base: string; commit: string }, includeDeleted?: boolean): Promise<string[]>;
 }
 
 /**
@@ -1749,18 +1749,19 @@ export class Workspaces implements CardWorkspaces {
    * ` b/` in it can in a diff's header; what `file` serves rests on this list. Empty where git
    * cannot tell.
    */
-  async changedFiles(cardId: string, landed?: { base: string; commit: string }): Promise<string[]> {
+  async changedFiles(cardId: string, landed?: { base: string; commit: string }, includeDeleted = false): Promise<string[]> {
     const names = async (cwd: string, args: string[]) => {
       const r = await gitRun(cwd, ['-c', 'core.quotePath=false', ...args]);
       if (r.code !== 0) throw new WorkspaceError(r.stderr);
       return r.stdout.split('\0').filter(Boolean);
     };
     try {
-      if (landed) return await names(this.o.repoPath, ['diff', '--name-only', '-z', '-M', '--diff-filter=d', landed.base, landed.commit]);
+      const filters = includeDeleted ? ['--no-renames'] : ['-M', '--diff-filter=d'];
+      if (landed) return await names(this.o.repoPath, ['diff', '--name-only', '-z', ...filters, landed.base, landed.commit]);
       const ws = this.leasedBy(cardId);
       if (!ws || !mayExist(ws)) return [];
       const base = await this.base(ws);
-      return [...(await worktreeNames(ws, base, ['-M', '--diff-filter=d'])), ...(await names(ws, ['ls-files', '-z', '--others', '--exclude-standard']))];
+      return [...(await worktreeNames(ws, base, filters)), ...(await names(ws, ['ls-files', '-z', '--others', '--exclude-standard']))];
     } catch {
       return [];
     }

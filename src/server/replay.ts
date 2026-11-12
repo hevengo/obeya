@@ -47,7 +47,7 @@ export interface SessionStart {
 /** What happened in a session, numbered (`seq`) in the order it happened: a call when it was made. */
 export type Entry = { seq: number; at: number } & (
   | { type: 'event'; event: AgentEvent }
-  | { type: 'call'; end: number; name: string; args: Record<string, unknown>; result: string; head?: Head; demo?: { dir: string; copy: string } }
+  | { type: 'call'; end: number; name: string; args: Record<string, unknown>; result: string; head?: Head; demo?: { dir: string; copy: string }; codeVideo?: { dir: string; copy: string } }
   | { type: 'send'; text: string; images: number }
   | { type: 'context'; text?: string }
   | { type: 'close' }
@@ -131,7 +131,7 @@ export function recordingRuntime(inner: AgentRuntime, dir: string, home: string)
           const at = Date.now();
           const k = calls++;
           const n = seq++;
-          const kept: Pick<Extract<Entry, { type: 'call' }>, 'head' | 'demo'> = {};
+          const kept: Pick<Extract<Entry, { type: 'call' }>, 'head' | 'demo' | 'codeVideo'> = {};
           if (worker) {
             // the commits since the worker's call before
             const from = await heads.get(spec.cwd);
@@ -143,12 +143,14 @@ export function recordingRuntime(inner: AgentRuntime, dir: string, home: string)
               await gitAsync(spec.cwd, 'bundle', 'create', '-q', join(dir, bundle), 'HEAD');
               kept.head = { bundle, from, to, ...((await descends(spec.cwd, from, to)) ? {} : { rewritten: true as const }) };
             }
-            // a question may bring a demo too (drafts to choose from)
-            const demoDir = t.name === HANDOVER || t.name === 'ask' ? (args.demo as { dir?: unknown } | undefined)?.dir : undefined;
-            if (typeof demoDir === 'string' && existsSync(demoDir)) {
-              const copy = `session-${i}/demo-${k}`;
-              cpSync(demoDir, join(dir, copy), { recursive: true, filter: (src) => basename(src) !== '.work' });
-              kept.demo = { dir: demoDir, copy };
+            // A question may bring behaviour drafts; a handover may bring both videos.
+            for (const [argument, field] of [['demo', 'demo'], ['code_video', 'codeVideo']] as const) {
+              const demoDir = t.name === HANDOVER || (argument === 'demo' && t.name === 'ask') ? (args[argument] as { dir?: unknown } | undefined)?.dir : undefined;
+              if (typeof demoDir === 'string' && existsSync(demoDir)) {
+                const copy = `session-${i}/${field === 'demo' ? 'demo' : 'code-video'}-${k}`;
+                cpSync(demoDir, join(dir, copy), { recursive: true, filter: (src) => basename(src) !== '.work' });
+                kept[field] = { dir: demoDir, copy };
+              }
             }
           }
           const result = await t.run(args);
@@ -621,7 +623,7 @@ function play(rec: Recorded, spec: AgentSpec, p: Player): AgentSession {
     if (!tool) return `the ${rec.start.role ?? 'agent'} has no tool ${e.name} any more`;
     try {
       if (e.head) await commits(e.head);
-      if (e.demo) cpSync(join(p.dir, e.demo.copy), swap.text(e.demo.dir), { recursive: true });
+      for (const video of [e.demo, e.codeVideo]) if (video) cpSync(join(p.dir, video.copy), swap.text(video.dir), { recursive: true });
     } catch (error) {
       return `the recorded work of ${e.name} does not go into the workspace: ${messageOf(error)}`;
     }

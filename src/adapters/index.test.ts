@@ -66,6 +66,16 @@ describe('withSettings', () => {
     expect(withSettings(generic, () => ({ workspaces: 'worktrees' }), true).workspaces).toBe('clones');
   });
 
+  test('code-video prose is optional, validated and overridden independently of other demo settings', () => {
+    const shared: RepoSettings = { demo: { code: 'Show boundaries', language: 'en' } };
+    expect(parseShared(JSON.stringify(shared))).toMatchObject({ settings: shared, problems: [] });
+    expect(parseShared(JSON.stringify({ demo: { code: true } })).problems).toContain('.obeya/settings.json, demo.code: expected string, received boolean');
+    expect(withSettings(generic, () => layerSettings<RepoSettings>(shared, { demo: { code: '' } })).demo).toEqual({ code: '', language: 'en' });
+    const repo = gitRepo(join(dir, 'code-video'));
+    expect(repoValues(repoInfo(repo), false, shared).demo.code).toEqual({ value: 'Show boundaries', source: 'repository' });
+    expect(repoValues(repoInfo(repo)).demo.code).toEqual({ value: '', source: 'default' });
+  });
+
   test("the app's fields each come from where they are set", () => {
     const shared: RepoSettings = { app: { run: 'Start it with `docker compose up -d`.', stop: 'docker compose down' } };
     const a = withSettings(generic, () => layerSettings<RepoSettings>(shared, { app: { stop: './stop.sh' } }));

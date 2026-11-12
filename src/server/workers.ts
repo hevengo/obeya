@@ -12,7 +12,7 @@ import { basename, isAbsolute, join } from 'node:path';
 import { type CardFile, changeSize, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
 import { DEFAULT_DEMO_DIRECTORY } from '../../plugin/skills/demo/lib/settings.ts';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { stopped, answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, pausableNow, type WorkerTurn, type CardLanding, type Demo, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, prototypeBuild, prototypeName, type Question, type RepoRef, type RepoSettings, type RestartReason, type Share, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started, type ApproveResult, cardAgentOf, type ChangeRoute, type Clash, type Finding, type FindingStatus, type Harness, type HeldChanges, type PageTags, PUSH_HOLD_MS } from '../core/types';
+import { stopped, answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, pausableNow, type WorkerTurn, type CardLanding, type Demo, type DemoKind, type VideoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, prototypeBuild, prototypeName, type Question, type RepoRef, type RepoSettings, type RestartReason, type Share, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started, type ApproveResult, cardAgentOf, type ChangeRoute, type Clash, type Finding, type FindingStatus, type Harness, type HeldChanges, type PageTags, PUSH_HOLD_MS } from '../core/types';
 import { BadRequest, type Board, pathOfRef, replyNote, type Retracted, type StoredDemo, titleKey, contributionOf, type PrState, type Shipped, type StoredContribution, type StoredNewRepo } from './board';
 import { parsePlanDoc } from '../core/plan-doc';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
@@ -151,7 +151,8 @@ interface HeldComment {
 
 /** Where in the demo video the owner's words are, as the worker reads it above them. */
 const spotNote = (spot: Spot) => {
-  return `[${spot.earlier ? 'Earlier demo video, one a later handover of yours replaced,' : 'Demo video'} at ${mmss(spot.at)}${spot.chapter ? `, chapter “${spot.chapter}”` : ''}${spot.narration ? `, narration: “${spot.narration}”` : ''}]`;
+  const name = spot.video === 'code' ? 'Code video' : 'Demo video';
+  return `[${spot.earlier ? `Earlier ${name.toLowerCase()}, one a later handover of yours replaced,` : name} at ${mmss(spot.at)}${spot.chapter ? `, chapter “${spot.chapter}”` : ''}${spot.narration ? `, narration: “${spot.narration}”` : ''}]`;
 };
 
 /** What is stored while landed work's worker finishes (`CardRow.landed`). */
@@ -1376,15 +1377,19 @@ export class Workers {
   private place(cardId: string, spot: SpotInput): Spot {
     const at = Math.max(0, Math.round(spot.at * 10) / 10);
     const row = this.o.board.row(cardId);
-    const current = row.demo ? (JSON.parse(row.demo) as StoredDemo) : undefined;
-    const earlier = spot.demo !== undefined && spot.demo !== current?.handover ? (JSON.parse(row.demos ?? '[]') as StoredDemo[]).findLast((d) => d.handover === spot.demo) : undefined;
-    const d = earlier ?? current;
+    const source = spot.video === 'code' ? row.code_video : row.demo;
+    const history = spot.video === 'code' ? row.code_videos : row.demos;
+    const current = source ? (JSON.parse(source) as StoredDemo) : undefined;
+    const earlier = spot.demo !== undefined && spot.demo !== current?.handover ? (JSON.parse(history ?? '[]') as StoredDemo[]).findLast((d) => d.handover === spot.demo) : undefined;
+    const historical = spot.demo !== undefined && spot.demo !== current?.handover;
+    const d = historical ? earlier : current;
     return {
       at,
+      ...(spot.video ? { video: spot.video } : {}),
       ...(d && d.kind !== 'html' ? placeIn(d.dir, d.chapters, at) : {}),
       ...(spot.still ? { still: spot.still } : {}),
-      ...(d?.handover !== undefined ? { demo: d.handover } : {}),
-      ...(earlier ? { earlier: true as const } : {}),
+      ...(spot.demo !== undefined ? { demo: spot.demo } : d?.handover !== undefined ? { demo: d.handover } : {}),
+      ...(historical ? { earlier: true as const } : {}),
     };
   }
 
@@ -1393,7 +1398,7 @@ export class Workers {
    * them. A demo from before handovers named theirs gets the last one before now: its time, and the
    * places in it the owner's comments are about.
    */
-  private earlier(cardId: string, row: CardRow): string {
+  private earlier(cardId: string, row: Pick<CardRow, 'demo' | 'demos'>): string {
     const { kept, ...replaced } = JSON.parse(row.demo!) as StoredDemo;
     const e = replaced.handover === undefined ? this.o.board.events(cardId).findLast((e) => e.kind === 'review') : undefined;
     // from its copy: the new demo may have been rendered over its files
@@ -1402,9 +1407,10 @@ export class Workers {
   }
 
   /** The demo handed over with the event `handover`, with where Obeya keeps a copy of its files (`keepDemo`) where it could make one. */
-  private keep<D extends { dir: string; kind: DemoKind }>(cardId: string, handover: number, demo: D): D & { kept?: string } {
+  private keep<D extends { dir: string; kind: DemoKind }>(cardId: string, handover: number, demo: D, video: VideoKind = 'demo'): D & { kept?: string } {
     if (!this.o.keptDemos) return demo;
-    const kept = join(this.o.keptDemos, cardId, String(handover));
+    // An HTML artifact shares its whole directory: private copies must live outside it.
+    const kept = join(this.o.keptDemos, cardId, ...(video === 'code' ? ['code'] : []), String(handover));
     return keepDemo(demo, kept) ? { ...demo, kept } : demo;
   }
 
@@ -4865,6 +4871,10 @@ export class Workers {
                   ),
               }
             : {}),
+          code_video: z.object({
+            dir: z.string().describe('absolute path of the code video: demo.mp4, captions.vtt and any captions.<language>.vtt tracks'),
+            chapters: z.array(z.string()).describe('scene titles in order'),
+          }).optional().describe('The separate, private code walkthrough made with the demo skill. Required for code-changing tasks when demo.code is enabled; docs-only tasks need none. Without a new one, the earlier code video stays. Never included in sharing or exports.'),
           files: z
             .array(z.object({ path: z.string(), caption: z.string() }))
             .max(MAX_RESULT_FILES)
@@ -4873,7 +4883,7 @@ export class Workers {
               `the files your card made or changed ${this.folder ? 'in the folder' : 'on your branch'} that are the result for the owner (a document, a report, a spreadsheet, a page; not the code or configuration behind it), each with its path and a one-line caption in ${language}. The card shows them beside the demo: Markdown formatted, a PDF in the browser's viewer, any other file to open on the owner's computer. Without them, the ones named at your last handover stand.`,
             ),
         },
-        run: ({ summary, demo, files, review: results, pr_draft: draft }) => {
+        run: ({ summary, demo, code_video, files, review: results, pr_draft: draft }) => {
           // a stopped pull this worker resolved lands as it hands it over, without the owner
           const long = tooLong(String(summary), 6000, 'ready_for_review');
           if (long) return long;
@@ -4881,6 +4891,7 @@ export class Workers {
           if (resolving) return this.landResolved(cardId, resolving);
           type Demo = { kind?: DemoKind; dir: string; chapters?: string[]; question?: { text: string } & Omit<Asked, 'question'>; page?: DemoPage; follows?: 'replaces' | 'supplements' };
           const given = demo as Demo | undefined;
+          let code = code_video as { dir: string; chapters: string[] } | undefined;
           // whether the branch holds work and decides where it lands, which git tells without blocking the server
           // a review card hands over the PR's head it reviewed, which is all Obeya ever merges
           // with the commits of its own on top of the PR's head, which Obeya pushes on the owner's approval
@@ -4888,7 +4899,7 @@ export class Workers {
             review
               ? this.ownCommits(cardId, review).then((mine) => (typeof mine === 'string' ? mine : handOverNow(d, named, shows, true, undefined, mine)))
               : Promise.all([this.o.workspaces.hasWork(cardId), this.landingOf(cardId)]).then(async ([work, { own }]) =>
-                  handOverNow(d, named, shows, work, own, undefined, work && !this.folder ? await this.o.workspaces.changedFiles(cardId) : undefined),
+                  handOverNow(d, named, shows, work, own, undefined, work && !this.folder ? await this.o.workspaces.changedFiles(cardId, undefined, true) : undefined),
                 );
           const handOverNow = (
             d: Demo | undefined,
@@ -4916,13 +4927,25 @@ export class Workers {
             // approved work that could not land comes back to be landed, not reviewed: its demo stands
             const approved = !!row.approved_at;
             // a handover in answer to the owner's words that brings no new demo is an answer to them, not a demo to watch
-            const answered = !d && !!row.detail && !!(JSON.parse(row.detail) as { answering?: boolean }).answering;
+            const answered = !d && !code && !!row.detail && !!(JSON.parse(row.detail) as { answering?: boolean }).answering;
             // without a new demo, the one on the card stands, unless it only came with a question
             const asked = !!row.demo && !!(JSON.parse(row.demo) as StoredDemo).asked;
             const kept = !d && !!row.demo && !asked;
             // in a folder without git the card's change list shows what changed, where often nothing can be shown on screen
             if (!d && !kept && !approved && !this.folder)
               return `Not handed over: every handover brings a demo${row.demo ? ' (the one you showed with your question is not one)' : ''}. Record it with ${this.demoSkill(cardId)}, or make an HTML artifact when the result is something to look at, then call ready_for_review again with it.`;
+            const requiresCode = !this.folder && !review && !row.prototype_of && !!this.o.adapter.demo?.code?.trim();
+            // Read the complete branch change, including deletions and both sides of renames.
+            // An unreadable change cannot establish the docs-only exemption.
+            const docsOnly = !!changed?.length && changed.every((file) => /\.(md|rst|adoc|asciidoc)$/i.test(file) || /(?:^|\/)(README|CHANGELOG|CONTRIBUTING|LICENSE|LICENCE|AUTHORS|NOTICE)(?:\.txt)?$/i.test(file) || /^docs\/.*\.txt$/i.test(file));
+            if (requiresCode && work && !docsOnly && !code && !row.code_video && !approved)
+              return `Not handed over: this repository requires a code video for code-changing tasks (demo.code). Record the complete card change with ${this.demoSkill(cardId)} in code-video mode, then call ready_for_review with code_video (dir and chapters). Docs-only changes need none.`;
+            let codeJson: string | undefined;
+            if (code) {
+              const chapters = readChapters(code.dir, code.chapters ?? []);
+              if (typeof chapters === 'string') return `Not handed over: ${chapters}. Fix the code video, then call ready_for_review again.`;
+              codeJson = JSON.stringify({ kind: 'video', dir: code.dir, chapters, ...videoFacts(code.dir) });
+            }
             let demoJson: string | undefined;
             if (d) {
               const kind = d.kind ?? 'video';
@@ -4970,6 +4993,8 @@ export class Workers {
             if (demoJson) demoJson = JSON.stringify({ ...this.keep(cardId, e.id, JSON.parse(demoJson) as StoredDemo), handover: e.id, at: e.at });
             // the demo it replaces stays with the card, for the owner to go back to; so do a question's drafts, which are no handover's result
             const demos = (demoJson || asked) && row.demo ? this.earlier(cardId, row) : undefined;
+            const codeVideos = codeJson && row.code_video ? this.earlier(cardId, { demo: row.code_video, demos: row.code_videos }) : undefined;
+            if (codeJson) codeJson = JSON.stringify({ ...this.keep(cardId, e.id, JSON.parse(codeJson) as StoredDemo, 'code'), handover: e.id, at: e.at });
             // approved work does not wait for the owner again: it stays with Obeya until its turn has ended
             this.o.board.work(cardId, {
               // the worker's last status line is about the work it hands over: it would show again once the card is at work
@@ -4979,6 +5004,8 @@ export class Workers {
               detail: JSON.stringify({ summary: report, ...(work ? (own ? { lands: own } : {}) : { noChange: true }), ...(answered && !approved ? { answered: true } : {}) }),
               ...(demoJson ? { demo: demoJson } : asked ? { demo: null } : {}),
               ...(demos ? { demos } : {}),
+              ...(codeJson ? { code_video: codeJson } : {}),
+              ...(codeVideos ? { code_videos: codeVideos } : {}),
               // the files named stand until a later handover names others (an empty list named clears them); a folder's card handed
               // over without a demo shows what it changed, while there are files of it to show
               ...(named?.length
@@ -5017,7 +5044,12 @@ export class Workers {
             return ending(`${END_TURN}${lands}`, `Recorded: your handover waits for the owner's approval.${lands}`, 'if they change what you handed over, hand it over again');
           };
           // a demo made on another machine is served and shared from its copy here
-          const handOverWith = (named?: CardFile[]): string | Promise<string> => {
+          const handOverWith = async (named?: CardFile[]): Promise<string> => {
+            if (code && hostName(this.o.board.row(cardId).workspace)) {
+              const here = await this.demoHere(cardId, code.dir);
+              if ('wrong' in here) return `Not handed over: the code video could not be copied to the owner's machine (${here.wrong}). Check the directory, then call ready_for_review again.`;
+              code = { ...code, dir: here.dir };
+            }
             if (given && hostName(this.o.board.row(cardId).workspace))
               return this.demoHere(cardId, given.dir).then((here) =>
                 'wrong' in here
@@ -5443,6 +5475,9 @@ ${idea.idea.brief}` : '',
         'Where either would do, record the video: watching the work happen is what the owner enjoys most.',
         "Where the work itself is a file for the owner (a document, a report, a spreadsheet in the repository), name it in ready_for_review's files: the card shows it beside the demo.",
       ].join(' '),
+    );
+    if (!card.prototypeOf && this.o.adapter.demo?.code?.trim()) parts.push(
+      `After the behaviour demo, make a separate code video with ${this.demoSkill(card.id)} in code-video mode, and supply code_video (dir and chapters) in ready_for_review. It covers this card's complete branch change from its base, not only the latest commit. Docs-only changes need none. After feedback you may keep the earlier code video or record another, as appropriate. The owner watches and comments on it on the card; it stays private when the behaviour demo is shared or exported. Repository guidance for the tour:\n${this.o.adapter.demo.code.trim()}`,
     );
     return parts.join('\n\n');
   }

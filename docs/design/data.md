@@ -19,7 +19,9 @@ Persistent (SQLite):
   contributor); an approval held until the work can land; landed work whose worker still finishes;
   a waiting card's stopped app, or where its app runs for the owner to try; the clone that keeps a
   card's branch since its workspace was taken from it; the model its session runs on; the files its
-  worker named as its result, and the demos of earlier handovers;
+  worker named as its result, and both the behaviour demo and private code video, with their independent earlier handovers;
+  timed comments identify the video as well as its handover, with absent identity on old comments
+  meaning the behaviour demo;
   proposals waiting for the owner; the new repository a card is to be built in, and that Obeya made
   it; an idea's brief, open questions and picks; a prototype's idea
   and outcome; a project's plan doc as last read and the plan docs its landed work added; its short
@@ -47,11 +49,14 @@ the Claude token the owner gave Obeya (`claude-token`), where the running Obeya 
 (`server.json`), the `tailscale serve` entry Obeya made (`tailscale-serve.json`), the key it signs
 pushes with (`vapid.json`), the app's server log (`app.log`) and its shell's failed rebuilds
 (`app-build.log`), the stalls of the server and its pages (`stalls.log`, see Running Obeya), voices
-and models (`voices/`), the workers' clones and worktrees (`workspaces/`), copies of demos and
+and models (`voices/`), the workers' clones and worktrees (`workspaces/`), copies of both videos and
 transcripts from SSH hosts (`hosts/<host>/`), the read tree's worktrees (`read/`), the cards' undo
 in folders without git (`undo/`), the files of looked-up answers (`answers/<canvas>/<thread>/`), the
 static sites Obeya keeps (`sites/<key>/`), the env files their repositories' settings name (relative
-to the home, `sites/demos/deploy.env`, say), and `share/`, the directory deploys run in.
+to the home, `sites/demos/deploy.env`, say), and `share/`, the directory deploys run in. `kept-demos/` holds copies of both videos by card and
+handover so re-rendering in the original directory preserves history; the code video occupies its
+own directory, outside any behaviour artifact directory, and never joins the shared site or export. Recordings for scratch replays keep
+and restore both video directories, leaving out their render frames.
 
 Derived, not stored: git, PR and CI state (read from git and GitHub), plan-doc content (read from
 the repository; the copy on the project is only for the archive).

@@ -4,7 +4,7 @@
 // end of the video, the words are about the work as a whole.
 
 import { useSyncExternalStore } from 'react';
-import { chapterAt, type SpotInput } from '../core/types';
+import { chapterAt, type SpotInput, type VideoKind } from '../core/types';
 import { api } from './api';
 import { MAX_SIDE } from './shots';
 
@@ -14,10 +14,12 @@ interface Watched {
   chapters: [number, string][];
   /** The demo it shows, by its handover (`Demo.handover`): the card's latest or an earlier one. */
   demo?: number;
+  videoKind?: VideoKind;
 }
 
 /** A place in the video: its time, the chapter there. */
 export interface Place {
+  video?: VideoKind;
   at: number;
   chapter?: string;
 }
@@ -33,8 +35,8 @@ const bump = () => {
 };
 
 /** The card's demo video is the one its words may be about, while it is shown; returns the end of that. */
-export function watch(cardId: string, video: HTMLVideoElement, chapters: [number, string][], demo?: number): () => void {
-  const w = { cardId, video, chapters, demo };
+export function watch(cardId: string, video: HTMLVideoElement, chapters: [number, string][], demo?: number, videoKind: VideoKind = 'demo'): () => void {
+  const w = { cardId, video, chapters, demo, videoKind };
   watched = w;
   dismissed = null;
   const moved = () => {
@@ -67,7 +69,7 @@ export function placeOn(cardId: string): Place | null {
   if (!v || !v.paused || !midway(v) || dismissed === v.currentTime) return null;
   const at = v.currentTime;
   const chapter = watched!.chapters[chapterAt(watched!.chapters, at)]?.[1];
-  return { at, ...(chapter ? { chapter } : {}) };
+  return { at, video: watched!.videoKind, ...(chapter ? { chapter } : {}) };
 }
 
 /** The same, live. */
@@ -116,6 +118,7 @@ export function grab(video: HTMLVideoElement): (() => Promise<string | undefined
 
 /** A place with its frame, taken now, for words that go out later (a recording). */
 export interface Taken {
+  video?: VideoKind;
   at: number;
   demo?: number;
   upload?: () => Promise<string | undefined>;
@@ -128,36 +131,45 @@ export function take(cardId: string): Taken | null {
   if (!place || !v) return null;
   const upload = grab(v);
   const demo = watched!.demo;
-  return { at: place.at, ...(demo !== undefined ? { demo } : {}), ...(upload ? { upload } : {}) };
+  return { at: place.at, video: watched!.videoKind, ...(demo !== undefined ? { demo } : {}), ...(upload ? { upload } : {}) };
 }
 
 /** What the server gets of a place taken before: its time, the demo it is in, and its frame, uploaded now. */
 export async function sent(taken: Taken | null): Promise<SpotInput | undefined> {
   if (!taken) return;
   const still = await taken.upload?.();
-  return { at: taken.at, ...(taken.demo !== undefined ? { demo: taken.demo } : {}), ...(still ? { still } : {}) };
+  return { at: taken.at, ...(taken.video ? { video: taken.video } : {}), ...(taken.demo !== undefined ? { demo: taken.demo } : {}), ...(still ? { still } : {}) };
 }
 
 /** The open card's demo view, which shows another of the card's demos on request and plays it from `at`; false when it has no such demo. */
 interface Versions {
   cardId: string;
+  videoKind: VideoKind;
+  activate?: () => void;
   shown?: number;
-  show: (demo: number, at: number) => boolean;
+  show: (demo: number | undefined, at: number) => boolean;
 }
 
-let versions: Versions | null = null;
+const versions = new Map<VideoKind, Versions>();
 
 /** The card's demo view goes to another of its demos when a comment on a place in that one is clicked; returns the end of that. */
 export function showsVersions(v: Versions): () => void {
-  versions = v;
+  versions.set(v.videoKind, v);
   return () => {
-    if (versions === v) versions = null;
+    if (versions.get(v.videoKind) === v) versions.delete(v.videoKind);
   };
 }
 
 /** Plays the card's video from a place a comment is about (in `demo`, which may be an earlier one), and brings it into view. */
-export function seekTo(cardId: string, at: number, demo?: number) {
-  if (demo !== undefined && versions?.cardId === cardId && versions.shown !== demo && versions.show(demo, at)) return;
+export function seekTo(cardId: string, at: number, demo?: number, videoKind: VideoKind = 'demo') {
+  const view = versions.get(videoKind);
+  if (view?.cardId === cardId) {
+    view.activate?.();
+    const handover = demo ?? view.shown;
+    view.show(handover, at);
+    return;
+  }
+  if (demo !== undefined || watched?.videoKind !== videoKind) return;
   const v = videoOf(cardId);
   if (!v) return;
   v.currentTime = at;

@@ -974,6 +974,18 @@ describe('publishing on approval', () => {
   }
   const on = (id: string) => (JSON.parse(board.row(id).share!) as { demos: { handover?: number }[] }).demos.map((d) => d.handover);
 
+  test('approval publishes the behaviour video alone, with no private code assets', async () => {
+    const c = card();
+    const code = videoDir(join(dir, 'private-code'));
+    writeFileSync(join(code, 'demo.mp4'), 'PRIVATE-CODE');
+    board.work(c.id, { code_video: JSON.stringify({ kind: 'video', dir: code, chapters: [[0, 'Private architecture']] }) });
+    sharing.approved(c.id);
+    await until(() => share(c.id)?.state === 'shared');
+    const page = join(dir, 'deployed', slug(c.id));
+    expect(readFileSync(join(page, 'demo.mp4'), 'utf8')).toBe('video');
+    expect(readFileSync(join(page, 'index.html'), 'utf8')).not.toContain('Private architecture');
+  });
+
   test('the latest demo goes on its page, and the trailer names the page before the deploy is done', async () => {
     const c = card();
     writeFileSync(join(dir, 'hold'), '');
@@ -1365,6 +1377,21 @@ describe('exporting a demo, where the repository has no demo site', () => {
     writeFileSync(join(d, 'poster.jpg'), 'JPEG');
     writeFileSync(join(d, 'captions.vtt'), 'WEBVTT\n\n00:00.000 --> 00:02.500\nDer Export </script> beginnt.\n');
   }
+
+  test('HTML and ZIP exports contain only the behaviour video', async () => {
+    const c = card('Ohne Ziel');
+    files(c, 'BEHAVIOUR');
+    const code = videoDir(join(dir, 'private-code'));
+    writeFileSync(join(code, 'demo.mp4'), 'PRIVATE-CODE');
+    board.work(c.id, { code_video: JSON.stringify({ kind: 'video', dir: code, chapters: [[0, 'Private architecture']] }) });
+    const html = new TextDecoder().decode((await sharing.export(c.id, 'html')).data);
+    expect(html).toContain(Buffer.from('BEHAVIOUR').toString('base64'));
+    expect(html).not.toContain(Buffer.from('PRIVATE-CODE').toString('base64'));
+    const out = await sharing.export(c.id, 'zip');
+    writeFileSync(join(dir, out.name), out.data);
+    expect(Bun.spawnSync(['unzip', '-o', '-d', join(dir, 'unzipped'), join(dir, out.name)]).exitCode).toBe(0);
+    expect(readFileSync(join(dir, 'unzipped', out.name.replace(/\.zip$/, ''), 'demo.mp4'), 'utf8')).toBe('BEHAVIOUR');
+  });
 
   test("as a ZIP, a demo with language tracks keeps the narration's captions.vtt beside them", async () => {
     const c = card('Ohne Ziel');

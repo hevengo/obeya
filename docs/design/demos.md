@@ -57,6 +57,15 @@ without Obeya. When both are requested the worker makes the behaviour demo first
 video in its own directory. The behaviour recipe's omission of code and requirement for an
 app view apply to that mode alone.
 
+A repository opts in with `demo.code`, prose describing what its owner values and where its
+boundaries are documented (see Repository settings). Absent or blank leaves it off. Code-changing
+tasks then require a separate code video with their initial handover; docs-only tasks do not.
+The check covers the complete card change, including deleted code and earlier commits. A change
+is docs-only when every changed path is a prose document (`.md`, `.rst`, `.adoc`, `.asciidoc`,
+standard extensionless documentation names or text documents under `docs/`). Configuration,
+scripts and executable documentation such as MDX count as code. When the change cannot be read,
+it cannot establish the docs-only exemption. Existing handovers without a code video remain readable.
+
 The worker reads the repository's instructions and relevant design chapters, along with any
 code-review prose supplied for the task or in the repository's settings. These supply the lens
 and the names for domains and boundaries. Principles such as YAGNI, DRY, KISS, WET (up to two
@@ -565,7 +574,11 @@ relabel an element, a scene clears its highlights first.
 
 ### The demo on the card
 
-The card shows the demo on the left, beside the conversation (see Card layout). Obeya serves video,
+The card shows the demo on the left, beside the conversation (see Card layout). A second
+"Code video" row opens the private code walkthrough in the same player on desktop and phone.
+Each video has its own chapters, captions and history. Only the behaviour demo can start
+automatically; selecting the code video waits for Play. Switching rows pauses the video left
+behind. A new handover may replace either video or keep it by omitting that field. Obeya serves video,
 poster and caption tracks (with range requests) and takes the chapter times from `chapters.vtt`
 (from the captions of a demo without it, rendered when they had a cue per scene). A range is
 read from disk at once and answered in one piece, up to 8 MiB per answer, the player asking for the
@@ -683,7 +696,9 @@ a section for the video. At the start or the end, words are about the work as a 
 
 The browser uploads the frame as a screenshot; the server adds the chapter and the narration's
 sentence at that time (its caption; in a demo with a cue per scene, estimated by its share of the cue). The conversation shows the
-words with the frame and "▶ 1:23 · chapter", which plays the video from there.
+words with the frame, video identity and "▶ 1:23 · chapter", which opens that video and plays it
+from there. The identity distinguishes the behaviour demo from the code video, even when they
+came with the same handover.
 
 On a card waiting for approval, Obeya holds such comments until the owner has finished watching, so
 the worker reworks the demo once. They show at once, with a line under the last that they go to the
@@ -694,7 +709,8 @@ as a card what still matters); otherwise ten minutes after the last. Approving a
 still takes them. Until they go, each stands dashed and unread at the end of the conversation, with
 a bin to take it back (its words return to an empty field); once sent it moves to where it went. The
 worker gets them in one message, each as `[Demo video at 1:23, chapter “…”, narration: “…”]` above
-the words with its frame. Such a comment is no answer to the report's question. Comments still held
+the words with its frame (`Code video` for the private walkthrough), and the handover identifies
+the version in that video's history. Such a comment is no answer to the report's question. Comments still held
 once the card no longer waits for approval (the worker, taking in earlier words, asked a question or
 went back to work) are never dropped: with a question open they go with the answer or a note (the
 line under them says so, without "Send now"); otherwise they go as a note when they would have.
@@ -710,7 +726,8 @@ Stepping does not count as having finished watching, and a new handover leaves t
 they look at. A demo whose files are gone is not offered, nor one from before Obeya kept copies
 (see The demo directory) whose directory a later one reused. A
 comment on a place keeps its demo: a click shows that demo, and the worker hears it as about the
-earlier video.
+earlier video. The code video follows the same history rules independently, with no sharing
+controls; keeping or replacing the behaviour demo does not replace the code video.
 
 ### UI checks
 

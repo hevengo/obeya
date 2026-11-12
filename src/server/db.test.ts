@@ -16,6 +16,8 @@ function beforeHistory(s: Store) {
 
 /** The index and log the migration for the archive's pages and search adds. */
 function beforeArchivePages(s: Store) {
+  s.db.run('ALTER TABLE cards DROP COLUMN code_video');
+  s.db.run('ALTER TABLE cards DROP COLUMN code_videos');
   s.db.run('DROP INDEX cards_archive_order');
   for (const trigger of ['archive_change', 'archive_change_new', 'archive_change_gone']) s.db.run(`DROP TRIGGER ${trigger}`);
   s.db.run('DROP TABLE archive_changes');
@@ -193,7 +195,7 @@ test('the migration gives the cards there are codes of their own, longer where t
     s.db.run('ALTER TABLE talk DROP COLUMN reply_only');
     s.db.run('DROP TABLE spend');
     s.db.run('ALTER TABLE cards DROP COLUMN spent');
-    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 18}`);
+    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 19}`);
     s.db.close();
     const after = new Store(path);
     expect(ids.map((id) => after.card(id)!.short)).toEqual(['12345678000040008000000000000001', '12345678000040008000000000000002', '1234aa', 'ffffff']);
@@ -242,7 +244,7 @@ test('the migration numbers the cards there are in the order they were made, acr
     s.db.run('ALTER TABLE talk DROP COLUMN reply_only');
     s.db.run('DROP TABLE spend');
     s.db.run('ALTER TABLE cards DROP COLUMN spent');
-    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 16}`);
+    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 17}`);
     s.db.close();
     const after = new Store(path);
     expect(['first', 'later', 'same-time'].map((id) => after.card(id)!.number)).toEqual([1, 2, 3]);
@@ -365,11 +367,32 @@ test('the migration gives what the Coordinator said, looked up and decided as `k
     s.db.run("UPDATE talk SET answer_by = 'koordinator'");
     s.db.run("UPDATE decisions SET by = 'koordinator'");
     beforeArchivePages(s);
-    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 2}`);
+    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 3}`);
     s.db.close();
     const after = new Store(path);
     expect(after.event(card!.id, said.id)!.author).toBe('coordinator');
     expect(after.talk('c').find((t) => t.id === asked)!.answerBy).toBe('coordinator');
     expect(after.cardDecisions('c', card!.id).map((d) => d.by)).toEqual(['coordinator']);
     after.db.close();
+  }));
+
+test('adding code videos preserves a legacy handover and stores each history independently', () =>
+  withPath((path) => {
+    const s = new Store(path);
+    s.ensureCanvas('c', 'C');
+    const [card] = s.insert([{ canvas_id: 'c', kind: 'task', x: 0, y: 0 }]);
+    const legacy = JSON.stringify({ dir: '/demo', kind: 'video', chapters: [], handover: 1 });
+    s.update(card!.id, { demo: legacy });
+    s.db.run('ALTER TABLE cards DROP COLUMN code_video');
+    s.db.run('ALTER TABLE cards DROP COLUMN code_videos');
+    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 1}`);
+    s.db.close();
+    const current = new Store(path);
+    expect(current.card(card!.id)).toMatchObject({ demo: legacy, code_video: null, code_videos: null });
+    const code = JSON.stringify({ dir: '/code', kind: 'video', chapters: [], handover: 2 });
+    current.update(card!.id, { code_video: code, code_videos: '[]' });
+    current.db.close();
+    const reopened = new Store(path);
+    expect(reopened.card(card!.id)).toMatchObject({ demo: legacy, code_video: code, code_videos: '[]' });
+    reopened.db.close();
   }));

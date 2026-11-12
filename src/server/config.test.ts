@@ -255,6 +255,19 @@ describe("Obeya's configuration", () => {
     expect(restarts).toBe(1);
   });
 
+  test('code-video prose is saved, can be disabled locally, and transfers to repository settings', async () => {
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web }] }]));
+    const c = config('file', [{ repos: [{ path: web }] }]);
+    await c.save([{ repos: [{ path: web, settings: { demo: { code: '  Explain the boundaries.  ', language: 'en' } } }] }]);
+    expect(c.repoSettings(web)?.demo).toEqual({ code: 'Explain the boundaries.', language: 'en' });
+    await c.shareSettings({ path: web });
+    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json')).demo).toEqual({ code: 'Explain the boundaries.', language: 'en' });
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.values.demo.code).toEqual({ value: 'Explain the boundaries.', source: 'repository' });
+    await c.save([{ repos: [{ path: web, settings: { demo: { code: ' ' } } }] }]);
+    expect(c.repoSettings(web)?.demo).toEqual({ code: '' });
+  });
+
   test("a file from before demo.language reads without its site's language, the site kept", async () => {
     const site = { title: 'Demos', url: 'https://demos.example.dev', deploy: 'deploy {dir}' };
     mkdirSync(join(dir, 'home'));

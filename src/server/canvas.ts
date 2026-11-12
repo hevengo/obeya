@@ -1790,9 +1790,10 @@ export class CanvasRuntime {
   /** A place in the demo video as the browser sent it: a frame Obeya does not have is left out; `demo` names the demo it is in. */
   private spot(spot: unknown): SpotInput | undefined {
     if (!spot || typeof spot !== 'object') return;
-    const { at, still, demo } = spot as Record<string, unknown>;
+    const { at, still, demo, video } = spot as Record<string, unknown>;
     if (typeof at !== 'number' || !Number.isFinite(at) || at < 0) throw new BadRequest('invalid', 'spot.at must be a time in the video, in seconds');
-    return { at, ...(typeof still === 'string' && this.images.path(still) ? { still } : {}), ...(Number.isInteger(demo) ? { demo: demo as number } : {}) };
+    if (video !== undefined && video !== 'demo' && video !== 'code') throw new BadRequest('invalid', 'spot.video must be demo or code');
+    return { at, ...(typeof still === 'string' && this.images.path(still) ? { still } : {}), ...(Number.isInteger(demo) ? { demo: demo as number } : {}), ...(video ? { video } : {}) };
   }
 
   /**

@@ -1961,7 +1961,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
  * The settings of a repository, set on this machine (`RepoSettings`); those of `app` and `demo` each
  * on its own, `demo.language` as `demoLanguage` beside the repository's own `language`.
  */
-type SettingKey = Exclude<keyof RepoSettings, NestedSetting> | 'run' | 'stop' | 'keep' | 'site' | 'demoLanguage';
+type SettingKey = Exclude<keyof RepoSettings, NestedSetting> | 'run' | 'stop' | 'keep' | 'site' | 'demoLanguage' | 'code';
 
 /** The setting of `app` or `demo` that holds `k`, and its field there, if one does. */
 function nestedOf(k: SettingKey): [NestedSetting, string] | undefined {
@@ -2012,7 +2012,7 @@ function RepoSettingsBlock({
   const c = t.config.settings;
   const s = repo.settings ?? {};
   const { app: _, demo: __, ...flat } = values;
-  const base: Record<SettingKey, SettingValue<unknown>> = { ...flat, ...values.app, site: values.demo.site, demoLanguage: values.demo.language };
+  const base: Record<SettingKey, SettingValue<unknown>> = { ...flat, ...values.app, site: values.demo.site, demoLanguage: values.demo.language, code: values.demo.code };
   const own = (k: SettingKey): unknown => {
     const n = nestedOf(k);
     return n ? (s[n[0]] as Record<string, unknown> | undefined)?.[n[1]] : s[k as keyof RepoSettings];
@@ -2157,6 +2157,12 @@ function RepoSettingsBlock({
             ))}
           </div>,
           c.demoLanguageHint,
+        )}
+        {!folder && row(
+          'code',
+          c.codeVideo,
+          <textarea aria-label={c.codeVideo} value={value<string>('code')} onChange={(e) => set('code', e.target.value)} />,
+          c.codeVideoHint,
         )}
         {row(
           'site',

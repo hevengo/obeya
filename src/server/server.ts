@@ -921,6 +921,28 @@ export function serve(
           }
         },
       },
+      // Private code videos use the same player assets and range serving, outside all share routes.
+      '/api/c/:canvas/cards/:id/code-video/*': {
+        GET: (req) => {
+          try {
+            const demo = byId.get(req.params.canvas)?.board.demoFiles(req.params.id, undefined, 'code');
+            const route = '/code-video/';
+            const file = decodeURIComponent(new URL(req.url).pathname.split(route).slice(1).join(route));
+            return demo ? serveDemoFile(demo, file, req, route) : notFound();
+          } catch { return notFound(); }
+        },
+      },
+      '/api/c/:canvas/cards/:id/code-videos/:n/*': {
+        GET: (req) => {
+          try {
+            const n = Number(req.params.n);
+            const demo = Number.isInteger(n) && n >= 0 ? byId.get(req.params.canvas)?.board.demoFiles(req.params.id, n, 'code') : null;
+            const route = `/code-videos/${n}/`;
+            const file = decodeURIComponent(new URL(req.url).pathname.split(route).slice(1).join(route));
+            return demo ? serveDemoFile(demo, file, req, route) : notFound();
+          } catch { return notFound(); }
+        },
+      },
       // a file the card's work made or changed, for its left column; `?download` to save it
       '/api/c/:canvas/cards/:id/files/*': {
         GET: (req) => {

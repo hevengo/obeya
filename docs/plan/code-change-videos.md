@@ -41,7 +41,8 @@ validation and narration-part lighting in the director. Structure supports up to
 three ordered boxes per lane and ten selected arrows; fit may refuse earlier for long text or
 crowded routes. Its API reference is `plugin/skills/demo/change-view.md`. The prototype files are
 removed. W2 supplies the separate code-video recipe and a runnable example using a temporary
-git repository, without an app or Obeya. Repository settings and handovers remain W3–W4.
+git repository, without an app or Obeya. W3 integrates repository opt-in and task handovers with two private video histories, shared playback,
+and timed comments; W4 remains for contributor reviews and prototypes.
 
 ## Design
 
@@ -185,7 +186,7 @@ rules. Keep work sequential where the skill, director, settings or handover code
   demo setup guidance. Done when the example produces a complete tour without an app or Obeya,
   at the confirmed design level, with captions and chapters, and normal behaviour demos still
   follow their existing recipe.
-- [ ] **W3:** Repository opt-in and task-card integration. After W2, carry `demo.code` through
+- [x] **W3:** Repository opt-in and task-card integration. After W2, carry `demo.code` through
   settings validation, resolution, Configuration, worker briefs, `docs/settings.md` and the
   settings skill. Extend `ready_for_review` and stored handovers to accept and require the second
   video for code-changing tasks, exempt docs-only changes and retain an earlier video after
