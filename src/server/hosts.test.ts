@@ -236,6 +236,30 @@ describe('clones on a host', () => {
     spaces = new Workspaces(store, 'c', { mode: 'clones', repoPath: join(dir, 'main'), dir: join(dir, 'ws') });
   });
 
+  overSsh('an offline clone stays protected when a stopped card is checked for archiving', async () => {
+    await spaces.ensureHostClones(host, join(dir, 'far'), origin, 1, () => 'ghp_x');
+    const card = board.create({ title: 'Remote export', x: 0, y: 0 });
+    const lease = spaces.lease(card.id, 'obeya/remote-export');
+    await lease.ready;
+    writeFileSync(join(dir, 'far', '1', 'draft.ts'), 'unfinished');
+    board.work(card.id, { branch: 'obeya/remote-export', workspace: lease.path, state: 'planned' });
+    const workers = new Workers({ board, runtime: new FakeRuntime(), workspaces: spaces, adapter: { ...generic, workspaces: 'clones', land: 'main' } });
+    try {
+      writeFileSync(join(dir, 'net', 'down'), '');
+      await workers.freeStoppedWorkspace(card.id, true);
+      expect(board.row(card.id).workspace).toBe(lease.path);
+      expect(spaces.leasedBy(card.id)).toBe(lease.path);
+      expect(() => board.archive([card.id])).toThrow(expect.objectContaining({ code: 'holdsWork' }));
+      rmSync(join(dir, 'net', 'down'));
+      expect(await spaces.hasWork(card.id, true)).toBe(true);
+      // An answering host can still confirm that a directory really is gone.
+      rmSync(join(dir, 'far', '1'), { recursive: true, force: true });
+      expect(await spaces.hasWork(card.id, true)).toBe(false);
+    } finally {
+      workers.shutdown();
+    }
+  });
+
   overSsh('are made there, leased after those here, and land through the remote', async () => {
     await spaces.ensureClones(origin, 1);
     expect(await spaces.ensureHostClones(host, join(dir, 'far'), origin, 2, () => 'ghp_x')).toBeNull();

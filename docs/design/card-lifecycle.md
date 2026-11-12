@@ -169,9 +169,10 @@ The owner archives a finished card ("Archive" on it, its archive button on the c
 finished ones at once in the archive); a prototype goes there when it ends (see Prototypes). A
 stopped task ("Stopped") can be archived one at a time, for the owner to come back to, beside "Start
 again" and "Delete". Clicking "Archive" checks whether work in its retained workspace has since
-landed, including a manual merge. The card stays on the canvas while it waits to start or holds
-unlanded work, with the reason if archiving is refused. A clone keeping its branch since its
-workspace was taken also prevents archiving (the button is greyed and says why): that work would
+landed, including a manual merge. The card stays on the canvas while it waits to start, holds
+unlanded work, or its workspace cannot be inspected, with the reason if archiving is refused. A
+clone keeping its branch since its workspace was taken also prevents archiving (the button is
+greyed and says why): that work would
 lie unseen in the clone. These work guards do not apply while its repository does not run on the
 canvas (see Repositories and configuration). A stopped card opens like a card an agent worked on,
 the task as its conversation's first message.

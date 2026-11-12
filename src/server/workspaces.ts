@@ -134,12 +134,15 @@ function mayExist(path: string): boolean {
 }
 
 /**
- * Whether a workspace's directory exists, here or on its host (where an unreachable host counts as
- * no); without blocking the server, since for a workspace on another machine it asks over SSH.
+ * Whether a workspace's directory exists, here or on its host; an unreachable host is an error,
+ * not an absent directory. A workspace on another machine is checked over SSH without blocking.
  */
 async function existsAsync(path: string): Promise<boolean> {
   const there = remoteWorkspace(path);
-  return there ? (await there.host.run(['test', '-e', there.path])).code === 0 : existsSync(path);
+  if (!there) return existsSync(path);
+  const result = await there.host.run(['test', '-e', there.path]);
+  if (result.code !== 0 && result.code !== 1) throw new WorkspaceError(result.stderr || `cannot check ${path}: exit code ${result.code}`);
+  return result.code === 0;
 }
 
 /**
