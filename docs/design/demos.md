@@ -48,6 +48,37 @@ and the demand for a demo at `ready_for_review` name the skill as the session li
 of its `SKILL.md` for a session that does not know it. At start, Obeya logs a warning when the
 plugin's manifest or the demo skill is missing.
 
+### Git-backed change views
+
+The director also records a local page built from explicit git base and head revisions, without
+an application running. Its structure view takes lanes with boxes in path order and labelled
+arrows describing selected uses; positions and routes are automatic. A box names its role, real
+git path and change size, or identifies an existing module. Tests, documentation and generated
+files are counted rather than toured. Internal boundaries may be labelled; inferred boundaries
+are visibly marked as inferred. Optional arrow proof and required panel locations are validated
+git paths and inclusive line ranges.
+
+Three other views show chosen patterns with rejected alternatives and existing precedents;
+design observations as fact, reason and trade-off; and one to three full-width stacked evidence
+excerpts. Evidence is read from an explicit revision, head by default. Deleted source can be
+shown at base. Every excerpt expands tabs to two-column stops, removes common indentation and
+wraps long lines while keeping one source line number. Added head lines and removed base lines
+are distinguished from context.
+
+The change frame starts at 1000 × 800, without a pointer or navigation. Structure supports up to
+three lanes with three boxes each and ten selected arrows. Text is measured without shrinking;
+labels are reserved before routing so arrows cannot cross box, heading, arrow-label or boundary
+text. A view that cannot fit refuses with a correction, such as shortening a label or splitting
+it across scenes. The dry run catches source and fit errors before recording. The API is in the
+skill's [change-view reference](../../plugin/skills/demo/change-view.md).
+
+Scenes can give narration in parts, each with the boxes, arrows, panels or source lines it
+lights. Part boundaries are caption sentence boundaries; scene preparation finishes before the narration
+clock starts. Lighting replaces the preceding part's
+and follows the same heard speech or silent reading times as captions, including translated
+tracks. Existing scenes with one narration string, app-demo pointers, chapters and captions
+continue through the same pipeline.
+
 ### The demo settings and voices
 
 The demo settings (`demo.json` in Obeya's home) are the machine's, for every canvas: the narration

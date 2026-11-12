@@ -1,7 +1,7 @@
 # Code-change walkthrough videos
 
 > Plan for a second video beside a card's behaviour demo, made with the demo skill. This doc
-> records the agreed design and the packages that can land in order; it implements none of them.
+> records the agreed design and the packages that can land in order; W1 supplies the reusable view and narration APIs; the remaining packages follow below.
 > When the project is done, move the lasting behaviour and decisions into the design chapters and
 > remove this doc and its link from `CONTRIBUTING.md`.
 
@@ -35,6 +35,12 @@ boundary's label. Automatic layout is the largest piece still to build.
 
 No product decisions remain open. The limits of a diagram that fits are to be established during
 implementation, using the confirmed three-lane, eight-box view as a known readable case.
+
+W1 now supplies the supported `lib/change-view.ts` API and four measured views, with git evidence
+validation and narration-part lighting in the director. Structure supports up to three lanes,
+three ordered boxes per lane and ten selected arrows; fit may refuse earlier for long text or
+crowded routes. Its API reference is `plugin/skills/demo/change-view.md`. The prototype files are
+removed. Skill-mode guidance, settings and handovers remain W2–W4.
 
 ## Design
 
@@ -158,7 +164,7 @@ Land these in order, W1 → W2 → W3 → W4. Each package leaves a usable resul
 change view, then a standalone skill mode, then task-card integration, then the remaining card
 rules. Keep work sequential where the skill, director, settings or handover code overlaps.
 
-- [ ] **W1:** Change view and narration-driven lighting. Builds on the prototype "Design-level
+- [x] **W1:** Change view and narration-driven lighting. Builds on the prototype "Design-level
   code video", taking over its branch and the reusable views at `a1b31869` under
   `plugin/skills/demo/prototype/`. Bring those into the demo skill as supported code, removing
   the fixed change and manual coordinates. Implement the four views above, git validation and

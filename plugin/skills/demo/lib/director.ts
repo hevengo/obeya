@@ -18,13 +18,37 @@ import { checkSetup, describeSetup } from './setup.ts';
 import { narrationTrack, narrationVtt, readingTimes, sentencesOf, spokenTimes, subtitleTracks, type Track, trackFile, trackVtt, vttTime } from './subtitles.ts';
 import { CLOCK, type Cut, type Frame, frameDurations, laterLabel, mmss, onPaintTime, readClock, videoTime } from './timeline.ts';
 import { ttsArgs, voiceSpec } from './voices.ts';
+import type { ChangeLighting, ChangeView } from './change-view.ts';
 
-export interface Scene {
+export interface NarrationPart {
+  /** One or more complete sentences. Part boundaries must also be caption boundaries. */
+  say: string;
+  /** Runs as this part starts, before its lighting; often shows a change view. */
+  run?: (d: Director) => Promise<void>;
+  /** Replaces the previous part's lighting. An omitted light clears it. */
+  light?: ChangeLighting;
+}
+export type Scene = {
   /** Chapter title in the player. */
   title: string;
-  /** Spoken while `run` executes, in the narration language, written as it should sound; its sentences are the captions. */
-  say: string;
+  /** Prepares the scene before its narration parts, or runs during a legacy scene's narration. */
   run?: (d: Director) => Promise<void>;
+} & ({ say: string; parts?: never } | { say?: never; parts: NarrationPart[] });
+
+export function sceneSay(scene: Scene) {
+  return scene.parts ? scene.parts.map(p => p.say).join(' ') : scene.say;
+}
+
+/** Keep parts on the same sentence clock as captions, heard speech and silent translations. */
+export function partStarts(scene: Scene, times: number[], language = 'en'): number[] {
+  if (!scene.parts) return [];
+  if (!scene.parts.length || scene.parts.some(p => !p.say.trim())) throw new Error(`Scene "${scene.title}" needs nonempty narration parts.`);
+  const sentences = sentencesOf(sceneSay(scene), language);
+  const each = scene.parts.map(p => sentencesOf(p.say, language));
+  if (JSON.stringify(each.flat()) !== JSON.stringify(sentences)) throw new Error(`Scene "${scene.title}": end each narration part with a complete sentence so its lighting follows a caption boundary.`);
+  if (times.length !== sentences.length) throw new Error(`Scene "${scene.title}": narration timings do not match its sentences.`);
+  let at = 0, sentence = 0;
+  return each.map(lines => { const start = at; for (const _ of lines) at += times[sentence++]!; return start; });
 }
 
 export interface Report {
@@ -52,6 +76,8 @@ export interface DemoSpec {
    * Retina screen, nearly lossless frames, and gentle compression. About ten times the file size.
    */
   sharp?: boolean;
+  /** No resting pointer for a narrated change view; app demos keep theirs. */
+  pointer?: boolean;
   /** Runs once in an unrecorded context; its cookies and storage carry into the recording. */
   login?: (page: Page) => Promise<void>;
   /** Brings the recorded page to the opening shot. Not part of the video. */
@@ -159,6 +185,15 @@ export class Director {
   evaluate<R, A = undefined>(fn: (arg: A) => R | Promise<R>, arg?: A): Promise<R> {
     // Playwright hands an element handle to `fn` as the element; the overlay takes either untyped.
     return answered(this.page.evaluate(fn as never, arg) as Promise<R>, 'a call into the page');
+  }
+
+  /** Shows a validated git-backed view; any layout refusal fails the scene in a dry run too. */
+  showChange(view: ChangeView) {
+    return this.evaluate(v => window.__change.show(v), view);
+  }
+
+  lightChange(light: ChangeLighting = {}) {
+    return this.evaluate(l => window.__change.light(l), light);
   }
 
   async goto(url: string) {
@@ -361,6 +396,7 @@ declare global {
     // Defined by overlay.js.
     // biome-ignore lint: the overlay is untyped browser script
     __demo: any;
+    __change: { show(view: ChangeView): Promise<void>; light(light?: ChangeLighting): void };
   }
 }
 
@@ -615,7 +651,7 @@ async function openPage(spec: DemoSpec, viewport: { width: number; height: numbe
   const scale = spec.sharp ? 2 : 1;
   const browser = await launch(viewport, scale);
   const ctx = await newContext(browser, { viewport, storageState, deviceScaleFactor: scale });
-  await ctx.addInitScript({ path: path.join(LIB, 'overlay.js') });
+  await ctx.addInitScript({ content: fs.readFileSync(path.join(LIB, 'overlay.js'), 'utf8') + (spec.pointer === false ? '\nwindow.__demo.pointer(false);' : '') });
   const page = await ctx.newPage();
   const d = new Director(page, spec.baseUrl, work, paced);
   try {
@@ -623,8 +659,27 @@ async function openPage(spec: DemoSpec, viewport: { width: number; height: numbe
   } catch (error) {
     throw await failure('open', page, work, error);
   }
-  await d.evaluate(() => window.__demo.moveTo(window.innerWidth * 0.6, window.innerHeight * 0.55));
+  if (spec.pointer !== false) await d.evaluate(() => window.__demo.moveTo(window.innerWidth * 0.6, window.innerHeight * 0.55));
   return { browser, ctx, page, d };
+}
+
+/** Parts share the caption clock. Their scene preparation finishes before narration starts. */
+export async function playScene(d: Director, scene: Scene, times?: number[], speechSeconds?: number) {
+  const start = now();
+  if (scene.parts) await scene.run?.(d);
+  const sentences = times ?? sentencesOf(sceneSay(scene), LANGUAGE).map(() => 0);
+  const total = sentences.reduce((a,b) => a+b, 0);
+  const speechStart = d.beginScene(speechSeconds ?? total);
+  if (!scene.parts) await scene.run?.(d);
+  else {
+    const starts = partStarts(scene, sentences, LANGUAGE);
+    for (const [i, part] of scene.parts.entries()) {
+      await d.untilSpoken(total ? starts[i]! / total : 0);
+      await part.run?.(d);
+      await d.lightChange(part.light);
+    }
+  }
+  return { start, speechStart };
 }
 
 /**
@@ -640,7 +695,7 @@ async function dryRun(spec: DemoSpec, viewport: { width: number; height: number 
     console.log(sceneName(i, spec));
     const start = now();
     try {
-      await scene.run?.(d);
+      await playScene(d, scene);
     } catch (error) {
       throw await failure(sceneName(i, spec), d.page, work, error);
     }
@@ -790,7 +845,8 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   // Everything the render needs is there before it starts, or it stops with the whole list.
   const setup = await checkSetup(SETTINGS, { narrationOnly: process.argv.includes('--narration') });
   if (setup.items.some((i) => i.state === 'missing')) throw new Error(`cannot render yet:\n${describeSetup(setup)}`);
-  const says = spec.scenes.map((s) => s.say);
+  const says = spec.scenes.map(sceneSay);
+  for (const scene of spec.scenes) partStarts(scene, sentencesOf(sceneSay(scene), LANGUAGE).map(() => 0), LANGUAGE);
   if (process.argv.includes('--narration')) {
     if (SILENT) return console.log('narration only: no voice, so nothing to synthesise');
     const clips = synthesize(says, work);
@@ -801,7 +857,7 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
     return;
   }
   // the subtitles' translations before anything is recorded: a silent scene lasts as long as its slowest language takes to read
-  const source = { language: LANGUAGE, scenes: spec.scenes.map((s) => ({ title: s.title, sentences: sentencesOf(s.say, LANGUAGE) })) };
+  const source = { language: LANGUAGE, scenes: spec.scenes.map((s) => ({ title: s.title, sentences: sentencesOf(sceneSay(s), LANGUAGE) })) };
   const subtitles = subtitleTracks(work, source, subtitleLanguages(SETTINGS));
   if ('brief' in subtitles) {
     console.log(subtitles.brief);
@@ -836,15 +892,16 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
   const t0 = now();
   const marks: Mark[] = [];
   for (const [i, scene] of spec.scenes.entries()) {
-    let start = 0;
+    let start = 0, speechStart = 0;
     console.log(sceneName(i, spec));
     try {
       // A scene can wait without touching the page (`untilSpoken`, `wait`): a page that hangs then
       // shows as a screencast without frames.
       const played = (async () => {
         await d.clearHighlights();
-        start = d.beginScene(speech[i]!);
-        await scene.run?.(d);
+        const timing = await playScene(d, scene, timings[i]!.sentences, speech[i]!);
+        start = timing.start;
+        speechStart = timing.speechStart;
         await d.untilSpoken(1);
         await d.wait(GAP_SECONDS * 1000);
       })();
@@ -854,7 +911,8 @@ export async function runDemo(spec: DemoSpec, demoDir: string) {
     }
     // In video time: what `skip` cut out is gone from the scenes after it.
     const at = videoTime(start, t0, d.cuts);
-    marks.push({ title: scene.title, start: at, speechStart: at + LEAD_SECONDS, speechEnd: at + LEAD_SECONDS + speech[i]!, ...timings[i]! });
+    const spokenAt = videoTime(speechStart, t0, d.cuts) + LEAD_SECONDS;
+    marks.push({ title: scene.title, start: at, speechStart: spokenAt, speechEnd: spokenAt + speech[i]!, ...timings[i]! });
   }
   const tEnd = now() + 0.8;
   try {
