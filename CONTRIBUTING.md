@@ -20,6 +20,8 @@ shows each plan doc as a project with a card per workstream; the change that fin
 ticks it off in the doc, and once all are ticked the project goes into the archive. When the
 project is done, what passes the design doc's test moves into it and the plan doc goes.
 
+Planned feature: [Run tasks in the project folder](docs/plan/project-folder-tasks.md).
+
 ## Cards
 
 A task is a card. Its agent works in its own clone or worktree on a branch of its own, asks on the
