@@ -39,7 +39,7 @@ import { pastedShots, pastedText } from './pasteHint';
 import { filesTo, imageFiles } from './shots';
 import { cardDraft, drafted, fieldOn, focusedDraft, insertPasted, keepDrafts, MIC_DRAFT, OBEYA_DRAFT, takesImages } from './draft';
 import { HoldToTalk, PushToTalk, SPACE_SHOWS_MS, TAP_MS, ToldList, usePushToTalk, useTold } from './voice';
-import { videoOf } from './spot';
+import { videoOf, visibleVideo } from './spot';
 import { CardView, cardClass, shownState, DepLinks, depHead, depWidth, linkPath, linkSpot, Edges, Links, Minimap, OldBunPill, ProjectView, RestartPill, Sheet, SourcePill, TalkIcon, UpdatePill, WorkspacesPill } from './parts';
 import { clampWidth, loadWidths, saveWidths, SHEET_W, type SheetWidths, widthsIn } from './sheetWidth';
 import { failText, landingLabel, t } from './strings';
@@ -1212,7 +1212,7 @@ function Canvas({
   /** Space or the microphone held: the demo video pauses, so its narration stays out of the recording. */
   const press = (space: boolean) => {
     const f = focusRef.current;
-    const video = f?.type === 'card' ? (videoOf(f.id) ?? panelRef.current?.querySelector('video') ?? null) : null;
+    const video = f?.type === 'card' ? (videoOf(f.id) ?? visibleVideo()) : null;
     pressing.current = { video, playing: !!video && !video.paused, at: performance.now(), space, dictating: !!focusedDraft() };
     video?.pause();
     // a tap on Space plays or pauses the video: with one open, the microphone shows it listens only once Space stays down

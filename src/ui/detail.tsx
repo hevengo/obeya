@@ -40,7 +40,7 @@ import { plainKey, useZoom } from './zoom';
 import { AttachButton, imageUrl, ShotStrip, Shots, useShotInput } from './shots';
 import { useStickToEnd } from './stickToEnd';
 import { newRepoWords, type RepoChoice, RepoPick, useRepoChoice } from './repoPick';
-import { dismissPlace, type Place, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
+import { dismissPlace, type Place, playAt, seekTo, showsVersions, usePlace, videoOf, watch } from './spot';
 import { cameInView, useSeen } from './seen';
 import { ClockMark, contributorChoice, SnoozeLine, SnoozeMenu, snoozeWho } from './snooze';
 import { becomesLabel, clock as time, errorText, failText, shortDay, snoozeWhen, stateLabel, t, uiLanguage } from './strings';
@@ -1872,6 +1872,14 @@ function DemoView({
   const src = (f: string) => cardAt(cardId, `${demo === latest ? `/${route[0]}/${f}` : `/${route[1]}/${(demo as EarlierDemo).n}/${f}`}${demo.handover === undefined ? '' : `?v=${demo.handover}`}`);
   // where the demo shown next plays from, when a comment on a place in it took the owner there
   const playFrom = useRef<number | null>(null);
+  const cancelSeek = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!active) {
+      cancelSeek.current?.();
+      cancelSeek.current = null;
+    }
+  }, [active]);
+  useEffect(() => () => cancelSeek.current?.(), []);
   const show = (d: Demo) => setShownN(d === latest ? null : (d as EarlierDemo).n);
   // start once the card has unfolded, like the mock, until it has played once; a demo kept on a finished card waits to be played.
   // A page out of sight (a tab in the background, an agent's browser) does not start it: nobody would see it, only hear it
@@ -1943,8 +1951,8 @@ function DemoView({
         const d = handover === undefined ? latest : all.find((d) => d.handover === handover);
         if (!d) return false;
         if (d === demo && video.current) {
-          video.current.currentTime = from;
-          video.current.play().catch(() => setStarted(false));
+          cancelSeek.current?.();
+          cancelSeek.current = playAt(video.current, from, () => setStarted(false));
         } else {
           playFrom.current = from;
           show(d);
@@ -1963,17 +1971,10 @@ function DemoView({
     playFrom.current = null;
     if (!v) return;
     if (from === null) return setStarted(false);
-    const go = () => {
-      v.currentTime = from;
-      v.play().catch(() => setStarted(false));
-    };
-    if (v.readyState >= 1) go();
-    else v.addEventListener('loadedmetadata', go, { once: true });
-    // into view with the line above it, unless its top is in view already
-    const column = v.closest('.split-main')?.getBoundingClientRect();
-    const top = v.getBoundingClientRect().top;
-    if (column && (top < column.top || top > column.bottom - 80)) v.closest('.demo-view')?.querySelector('.demo-versions')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    return () => v.removeEventListener('loadedmetadata', go);
+    cancelSeek.current?.();
+    const cancel = playAt(v, from, () => setStarted(false));
+    cancelSeek.current = cancel;
+    return cancel;
   }, [shownN]);
   return (
     <>

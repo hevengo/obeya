@@ -60,6 +60,30 @@ export function watch(cardId: string, video: HTMLVideoElement, chapters: [number
 /** The open card's demo video, if words on the card may be about a place in it. */
 export const videoOf = (cardId: string): HTMLVideoElement | null => (watched?.cardId === cardId ? watched.video : null);
 
+/** The visible card video when comments are unavailable, for Space and push-to-talk as well. */
+export const visibleVideo = (): HTMLVideoElement | null => [...document.querySelectorAll<HTMLVideoElement>('.card-sheet video')].find((v) => !v.closest('[hidden]')) ?? null;
+
+/** Seek once metadata is ready, revealing the player; cancelling or hiding it abandons playback. */
+export function playAt(video: HTMLVideoElement, at: number, failed: () => void = () => {}): () => void {
+  let cancelled = false;
+  let frame: number | undefined;
+  const ready = () => {
+    frame = requestAnimationFrame(() => {
+      if (cancelled || video.isConnected === false || video.closest('[hidden]')) return;
+      video.currentTime = at;
+      video.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      video.play().catch(failed);
+    });
+  };
+  if (video.readyState >= 1) ready();
+  else video.addEventListener('loadedmetadata', ready, { once: true });
+  return () => {
+    cancelled = true;
+    if (frame !== undefined) cancelAnimationFrame(frame);
+    video.removeEventListener('loadedmetadata', ready);
+  };
+}
+
 /** Whether the video stands somewhere in the middle: neither before it started nor at its end. */
 export const midway = (v: HTMLVideoElement) => v.currentTime > 0 && !v.ended && !(v.duration && v.currentTime >= v.duration - 0.05);
 
@@ -172,7 +196,5 @@ export function seekTo(cardId: string, at: number, demo?: number, videoKind: Vid
   if (demo !== undefined || watched?.videoKind !== videoKind) return;
   const v = videoOf(cardId);
   if (!v) return;
-  v.currentTime = at;
-  v.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  v.play().catch(() => {});
+  playAt(v, at);
 }

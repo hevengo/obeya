@@ -25,7 +25,7 @@ import { Cards } from './message';
 import { glide, type Mark, settle, speed, THROWN, thrown } from './panelHeight';
 import { shownState, TalkIcon } from './parts';
 import { PROBE_MS, quietText, TAILSCALE_APP, useTailnet, useWhyQuiet } from './reach';
-import { videoOf } from './spot';
+import { videoOf, visibleVideo } from './spot';
 import { failText, forTouch, t } from './strings';
 import { UsagePill } from './usage';
 import { agentWorks, cardTalk, coordinatorReads, obeyaWorks, opensWithTalk, runs, unseen } from './talk';
@@ -415,7 +415,7 @@ export function Phone({ canvases: loaded }: { canvases: CanvasInfo[] }) {
   const pressing = useRef<{ video: HTMLVideoElement | null; playing: boolean; dictating: boolean } | null>(null);
   const press = () => {
     const id = openRef.current;
-    const video = id ? (videoOf(id) ?? document.querySelector<HTMLVideoElement>('.card-sheet video')) : null;
+    const video = id ? (videoOf(id) ?? visibleVideo()) : null;
     pressing.current = { video, playing: !!video && !video.paused, dictating: !!focusedDraft() };
     video?.pause();
     pttRef.current.start();
