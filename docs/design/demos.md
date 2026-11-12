@@ -64,7 +64,10 @@ The check covers the complete card change, including deleted code and earlier co
 is docs-only when every changed path is a prose document (`.md`, `.rst`, `.adoc`, `.asciidoc`,
 standard extensionless documentation names or text documents under `docs/`). Configuration,
 scripts and executable documentation such as MDX count as code. When the change cannot be read,
-it cannot establish the docs-only exemption. Existing handovers without a code video remain readable.
+it cannot establish the docs-only exemption. Enabled contributor reviews and prototypes require a
+code video too (see Review cards and Prototypes); their requirement does not depend on the worker
+changing code. After feedback an earlier tour can stand where it still describes the result.
+Existing handovers without a code video remain readable.
 
 The worker reads the repository's instructions and relevant design chapters, along with any
 code-review prose supplied for the task or in the repository's settings. These supply the lens
@@ -771,6 +774,16 @@ translate or install, the first-fullscreen hint), which would catch taps meant f
 `rotate` turns the emulator's acceleration sensor, as a hand turns the phone.
 
 ### Decisions
+
+- **A separate, opt-in code video** (owner, 2026-11-12): the owner judges the design beside the
+  behaviour demo, with repository prose as the lens and no quality score or principle checklist.
+  It uses the demo skill's narration, captions and player and stays private, including on
+  contributor reviews. Rejected: live diff presentations, code chapters in the behaviour demo,
+  and walkthrough exports; colleagues should receive the behaviour demo alone.
+- **Git-backed views with narration-driven lighting** (owner, 2026-11-12): the design-level
+  prototype supplies structure, patterns, observations and evidence views. Automatic layout and
+  measured fit refusal replace manual coordinates; spoken parts drive highlights instead of
+  manual timings. The other prototypes were discarded.
 
 - **Subtitles are switchable tracks in a free list of languages** (owner, 2026-11-01): a colleague
   who reads another language picks their track. Rejected: subtitles burnt into the picture, and a

@@ -242,7 +242,7 @@ field of `app` and `demo` is a setting of its own, so this machine may set `app.
 `app.run` to the repository. `demo.code` is optional prose enabling a private code
 walkthrough, with the owner's lens for architecture, boundaries and patterns. "Code video" in
 Configuration edits it on this machine and can take it over for everyone; blank disables it even
-when the repository enables it. The task worker receives the prose with its brief. See Code videos
+when the repository enables it. Workers of tasks, contributor reviews and prototypes receive the prose with their briefs. See Code videos
 and git-backed change views for the handover rules.
 
 Precedence, highest first: this machine's values, `.obeya/settings.json`, detection (main branch,

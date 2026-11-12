@@ -172,7 +172,8 @@ page for something to look at; the worker picks which, and runs the app for it a
   Obeya finds it in the repository's `.obeya/settings.json`. A voice that clones a clip uses the
   clip of this language, so each machine's demo settings name one per language.
 
-- `code`: optional prose enabling a second, private video for code-changing tasks. Describe what
+- `code`: optional prose enabling a second, private video for code-changing tasks, contributor reviews
+  and prototypes. Describe what
   the owner looks for in patterns, architecture and domain boundaries, and point to the repository's
   design docs. For example: `"Explain the boundaries in docs/design.md and why each pattern fits.
   Prefer simple designs without speculative abstraction."` An absent or blank value leaves this off;
@@ -181,7 +182,9 @@ page for something to look at; the worker picks which, and runs the app for it a
   and "Take over into the repository for everyone" saves it with the other repository settings.
 
   An enabled task hands over the behaviour demo or artifact and a separate code video covering the
-  complete card change. Docs-only changes need no code video. After feedback the worker may keep
+  complete card change. Reviews tour the contributor’s merge-base-to-head change and locate findings;
+  prototypes use a 30–60 second tour of the approach, structure, carry-forward parts and shortcuts.
+  Docs-only tasks need no code video. After feedback the worker may keep
   either earlier video independently. The code video uses the same language, voice, captions and
   chapters, but starts only when played. It stays on the owner's card; shared pages, automatic
   publishing and exports include only the behaviour demo. Directly requesting a code video with

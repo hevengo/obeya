@@ -73,7 +73,17 @@ HTML after the brief.
 
 "Have a prototype built", when talking is not enough: a worker builds a throwaway prototype in its
 own workspace, on a card of its own below the idea, and records a demo. Several may run side by
-side, one per approach, each titled with it ("Prototype: Logo – wordmark").
+side, one per approach, each titled with it ("Prototype: Logo – wordmark"). The worker builds only
+what that demo needs, without tests, polish or documentation, and commits the prototype so it
+can be reproduced or built on.
+
+When `demo.code` is enabled, its handover also requires a private 30–60 second code video: the
+approach and structure, what would carry into a build on this branch and what is a shortcut
+(see Code videos and git-backed change views). This does not turn the limited build into
+production work. The requirement also applies when the prototype changes no code; without
+the setting, or with it blank, the behaviour demo alone is enough. After feedback the worker may
+retain an earlier tour that still applies, or replace it. Both videos use the same player,
+history and timed comments as task cards; only the behaviour demo is shared.
 
 When the brief plans prototypes of several variants, the agent passes them to Obeya
 (`plan_prototypes`: per variant a few words and what its prototype shows). The button then offers

@@ -55,7 +55,7 @@ Find out, from the files rather than by guessing:
 Some things only the owner knows: the login for a demo when no seed makes one, which test data
 shows the app well, whether approved work may go straight
 onto the default branch, where demos are shared with colleagues (a static site: `demo.site`), and
-whether code-changing tasks should also bring a private code video (`demo.code`, prose saying what
+whether code-changing tasks, contributor reviews and prototypes should also bring a private code video (`demo.code`, prose saying what
 they value in architecture, boundaries and patterns; absent by default), and where plan docs go: the directory of plans you found (its docs then converted with "Prepare as a
 project" on the canvas), or a new `docs/plan/`. Collect them and ask in one question
 (the `ask` tool under Obeya), with the options you found, while you go on with the rest. A secret
@@ -70,7 +70,8 @@ defaults: `setup`, `checks`, `land`, `direct`, `autoMerge`, `planDocs`, `softPat
 
 `demo.code` is the owner's lens for a second video, made after the behaviour demo. Keep it as a
 few sentences and refer to the repository's design docs for its boundaries. A blank value disables
-it. Code-changing tasks then require the video; docs-only changes are exempt. Both videos stay
+it. Code-changing tasks and contributor reviews then require the video; prototypes require its
+30–60 second short form. Docs-only tasks are exempt. Both videos stay
 on the card, but only the behaviour demo is shared or exported.
 
 `app.run` is the part that decides whether workers can run and show their work. Write it for a

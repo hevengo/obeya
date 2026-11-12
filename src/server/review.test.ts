@@ -68,6 +68,7 @@ let approvals: string[];
 /** The follow-up tasks made, each with its review card, as the Coordinator hears of them. */
 let followed: [string, string][];
 let prHead: string;
+let settings: RepoAdapter;
 
 /** A commit on the contributor's side, published as the PR's head in `origin`. */
 function push(file: string) {
@@ -93,7 +94,7 @@ beforeEach(async () => {
   fake = fakeForge(() => git(origin, 'rev-parse', 'contrib'));
   approvals = [];
   followed = [];
-  const settings: RepoAdapter = { ...generic, land: 'main', workspaces: 'clones', checks: ['bun test'] };
+  settings = { ...generic, land: 'main', workspaces: 'clones', checks: ['bun test'] };
   makeWorkers = () => new Workers({ board, runtime, workspaces, adapter: settings, forge: fake.forge, repoPath: main, remote: origin, pulls: workspaces, pushHold: 10, pushSettle: 1, onApproval: (id) => (approvals.push(id), null), onFollowUpTask: (task, review) => followed.push([task, review]) });
   workers = makeWorkers();
   watcher = new PrWatcher(board, workers, fake.forge, () => main, () => settings);
@@ -151,6 +152,14 @@ function landedLocally(file: string, subject: string) {
 /** Once the probes of the card's PR against the local main started so far are through. */
 const probed = (id: string) => (workers as unknown as { probeClash(id: string): Promise<unknown> }).probeClash(id);
 
+function codeTour(name = 'code-tour') {
+  const path = join(dir, name);
+  mkdirSync(path, { recursive: true });
+  writeFileSync(join(path, 'demo.mp4'), 'private code video');
+  writeFileSync(join(path, 'captions.vtt'), 'WEBVTT\n\n00:00:00.000 --> 00:00:06.000\nThe dependency crosses this boundary.\n');
+  return { dir: path, chapters: ['Review findings'] };
+}
+
 describe('a review card', () => {
   test('starts on the PR head, its worker told to read the diff before running any of it', async () => {
     const id = await reviewCard();
@@ -166,6 +175,76 @@ describe('a review card', () => {
     // watched from the start
     expect(board.item(id)!.pr).toMatchObject({ url: URL_, number: 5 });
     expect(board.item(id)!.contribution).toMatchObject({ number: 5, author: 'amerlander', canModify: true });
+  });
+
+  test('enabled reviews require the private tour after the review, with findings kept in their mechanism', async () => {
+    settings.demo = { code: 'Explain boundaries and simple patterns.' };
+    const id = await reviewCard();
+    const brief = runtime.last.inbox[0]!;
+    expect(brief).toContain('Explain boundaries and simple patterns.');
+    expect(brief).toContain('merge base to the PR head');
+    expect(brief).toContain('Locate each review finding');
+    expect(brief).toContain('design problem needing a decision');
+    expect(brief).toContain('never goes to the contributor');
+    expect(brief.indexOf('Review the code')).toBeLessThan(brief.indexOf('After reviewing'));
+    runtime.last.call('findings', { findings: FINDINGS });
+    expect(await runtime.last.call('ready_for_review', { summary: 'Reviewed', demo: artifact(), review: results })).toContain('requires a code video');
+    expect(board.item(id)!.state).toBe('working');
+    expect(contribution(id).reviewed).toBeUndefined();
+    const tour = codeTour();
+    expect(await runtime.last.call('ready_for_review', { summary: 'Reviewed', demo: artifact(), code_video: tour, review: results })).toContain('End your turn');
+    const shown = board.item(id)!;
+    expect(shown.codeVideo!.chapters).toEqual([[0, 'Review findings']]);
+    expect(shown.contribution!.findings).toHaveLength(2);
+    runtime.last.emit({ type: 'idle' });
+    workers.message(id, 'Explain the dependency');
+    expect(await runtime.last.call('ready_for_review', { summary: 'Explained', review: results })).toContain('End your turn');
+    expect(board.item(id)!.codeVideo!.handover).toBe(shown.codeVideo!.handover);
+    workers.message(id, 'About the finding', [], false, undefined, { at: 2, video: 'code', demo: shown.codeVideo!.handover });
+    expect(board.events(id).at(-1)!.spot).toMatchObject({ video: 'code', chapter: 'Review findings', narration: 'The dependency crosses this boundary.' });
+    workers.message(id, '', [], false, undefined, undefined, { 1: 'contributor' });
+    expect(await runtime.last.call('request_changes', { body: 'Please validate the path.', findings: [1] })).toContain('waits for amerlander');
+    expect(fake.said.reviews).toEqual(['Please validate the path.']);
+    expect(fake.said.comments).toEqual([]);
+  });
+
+  test('a new contributor head can retain a still-current tour or replace it in the same history', async () => {
+    settings.demo = { code: 'Explain boundaries.' };
+    const id = await reviewCard();
+    runtime.last.call('findings', { findings: [] });
+    await runtime.last.call('ready_for_review', { summary: 'Reviewed', demo: artifact(), code_video: codeTour(), review: results });
+    const first = board.item(id)!.codeVideo!.handover;
+    runtime.last.emit({ type: 'idle' });
+    push('README.md');
+    await expect(workers.approve(id)).rejects.toMatchObject({ code: 'prMoved' });
+    expect(runtime.last.inbox.at(-1)).toContain('code video');
+    const ws = board.row(id).workspace!;
+    git(ws, 'fetch', '--quiet', origin, 'refs/pull/5/head');
+    git(ws, 'merge', '--ff-only', 'FETCH_HEAD');
+    expect(await runtime.last.call('ready_for_review', { summary: 'Tour still covers the design; new docs reviewed', review: results })).toContain('End your turn');
+    expect(contribution(id).reviewed).toBe(prHead);
+    expect(board.item(id)!.codeVideo!.handover).toBe(first);
+    expect(await runtime.last.call('ready_for_review', { summary: 'Updated the tour', code_video: codeTour('updated-tour'), review: results })).toContain('End your turn');
+    expect(board.item(id)!.codeVideos!.map((v) => v.handover)).toEqual([first]);
+    runtime.last.emit({ type: 'idle' });
+    await workers.approve(id);
+    expect(fake.said.merges).toEqual([prHead]);
+    expect(fake.said.comments.join(' ')).not.toContain('code-tour');
+    expect(fake.said.comments.join(' ')).not.toContain('updated-tour');
+  });
+
+  test('a review with code videos disabled hands over without one, also on a new head', async () => {
+    settings.demo = { code: '' };
+    const id = await reviewCard();
+    expect(runtime.last.inbox[0]).not.toContain('Repository guidance for the tour');
+    expect(await handOver()).toContain('End your turn');
+    push('later.ts');
+    await expect(workers.approve(id)).rejects.toMatchObject({ code: 'prMoved' });
+    const ws = board.row(id).workspace!;
+    git(ws, 'fetch', '--quiet', origin, 'refs/pull/5/head');
+    git(ws, 'merge', '--ff-only', 'FETCH_HEAD');
+    expect(await handOver(false)).toContain('End your turn');
+    expect(board.item(id)!.codeVideo).toBeUndefined();
   });
 
   test('answered, a question of its worker sends it back to work, not to wait for the contributor', async () => {

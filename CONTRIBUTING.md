@@ -20,9 +20,6 @@ shows each plan doc as a project with a card per workstream; the change that fin
 ticks it off in the doc, and once all are ticked the project goes into the archive. When the
 project is done, what passes the design doc's test moves into it and the plan doc goes.
 
-The [code-change walkthrough videos plan](docs/plan/code-change-videos.md) adds an optional
-design-level video beside the behaviour demo, in four packages that land in order.
-
 ## Cards
 
 A task is a card. Its agent works in its own clone or worktree on a branch of its own, asks on the

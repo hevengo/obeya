@@ -1850,7 +1850,7 @@ export class Workers {
         c.held
           ? `The owner approved your handover, but the pull request's head is ${head.slice(0, 7)} now, not the ${c.held.base.slice(0, 7)} your commits build on: ${c.author} pushed meanwhile. So Obeya pushed, posted and merged nothing.`
           : `The owner approved your handover, but the pull request's head is ${head.slice(0, 7)} now, not the ${c.reviewed?.slice(0, 7) ?? 'commit'} you handed over, so Obeya did not merge it.`,
-        `Review it as it is now: fetch its head, look at what changed before you run any of it, then the code review, a new demo where the change shows, the checks and the merge probe.${c.held ? ' Put your own commits on top of the new head first (rebase; the PR\'s commits stay as they are), and check that pr_draft still says what goes with them.' : ''} Hand over again.`,
+        `Review it as it is now: fetch its head, look at what changed before you run any of it, then the code review, a new demo where the change shows, the checks and the merge probe.${this.o.adapter.demo?.code?.trim() ? ' Check that the code video still covers the change from merge base to the new PR head and the updated findings; record it again where needed.' : ''}${c.held ? ' Put your own commits on top of the new head first (rebase; the PR\'s commits stay as they are), and check that pr_draft still says what goes with them.' : ''} Hand over again.`,
         comments?.text ?? '',
       ]
         .filter(Boolean)
@@ -4874,7 +4874,7 @@ export class Workers {
           code_video: z.object({
             dir: z.string().describe('absolute path of the code video: demo.mp4, captions.vtt and any captions.<language>.vtt tracks'),
             chapters: z.array(z.string()).describe('scene titles in order'),
-          }).optional().describe('The separate, private code walkthrough made with the demo skill. Required for code-changing tasks when demo.code is enabled; docs-only tasks need none. Without a new one, the earlier code video stays. Never included in sharing or exports.'),
+          }).optional().describe('The separate, private code walkthrough made with the demo skill. Required when demo.code is enabled for contributor reviews, prototypes (30–60 seconds), and code-changing tasks; docs-only tasks need none. Without a new one, the earlier code video stays. Never included in sharing or exports.'),
           files: z
             .array(z.object({ path: z.string(), caption: z.string() }))
             .max(MAX_RESULT_FILES)
@@ -4934,12 +4934,18 @@ export class Workers {
             // in a folder without git the card's change list shows what changed, where often nothing can be shown on screen
             if (!d && !kept && !approved && !this.folder)
               return `Not handed over: every handover brings a demo${row.demo ? ' (the one you showed with your question is not one)' : ''}. Record it with ${this.demoSkill(cardId)}, or make an HTML artifact when the result is something to look at, then call ready_for_review again with it.`;
-            const requiresCode = !this.folder && !review && !row.prototype_of && !!this.o.adapter.demo?.code?.trim();
+            const requiresCode = !this.folder && !!this.o.adapter.demo?.code?.trim();
             // Read the complete branch change, including deletions and both sides of renames.
             // An unreadable change cannot establish the docs-only exemption.
             const docsOnly = !!changed?.length && changed.every((file) => /\.(md|rst|adoc|asciidoc)$/i.test(file) || /(?:^|\/)(README|CHANGELOG|CONTRIBUTING|LICENSE|LICENCE|AUTHORS|NOTICE)(?:\.txt)?$/i.test(file) || /^docs\/.*\.txt$/i.test(file));
-            if (requiresCode && work && !docsOnly && !code && !row.code_video && !approved)
-              return `Not handed over: this repository requires a code video for code-changing tasks (demo.code). Record the complete card change with ${this.demoSkill(cardId)} in code-video mode, then call ready_for_review with code_video (dir and chapters). Docs-only changes need none.`;
+            if (requiresCode && (review || row.prototype_of || (work && !docsOnly)) && !code && !row.code_video && !approved) {
+              const scope = review
+                ? 'contributor reviews (demo.code). After reviewing, tour the change from merge base to the PR head, locating each finding; record decisions through findings'
+                : row.prototype_of
+                  ? 'prototypes (demo.code). Make a 30–60 s tour of the approach, structure, what carries into a build on this branch and what is a shortcut'
+                  : 'code-changing tasks (demo.code). Record the complete card change; docs-only tasks need none';
+              return `Not handed over: this repository requires a code video for ${scope}. Use ${this.demoSkill(cardId)} in code-video mode, then call ready_for_review with code_video (dir and chapters).`;
+            }
             let codeJson: string | undefined;
             if (code) {
               const chapters = readChapters(code.dir, code.chapters ?? []);
@@ -5476,10 +5482,20 @@ ${idea.idea.brief}` : '',
         "Where the work itself is a file for the owner (a document, a report, a spreadsheet in the repository), name it in ready_for_review's files: the card shows it beside the demo.",
       ].join(' '),
     );
-    if (!card.prototypeOf && this.o.adapter.demo?.code?.trim()) parts.push(
-      `After the behaviour demo, make a separate code video with ${this.demoSkill(card.id)} in code-video mode, and supply code_video (dir and chapters) in ready_for_review. It covers this card's complete branch change from its base, not only the latest commit. Docs-only changes need none. After feedback you may keep the earlier code video or record another, as appropriate. The owner watches and comments on it on the card; it stays private when the behaviour demo is shared or exported. Repository guidance for the tour:\n${this.o.adapter.demo.code.trim()}`,
-    );
-    return parts.join('\n\n');
+    parts.push(this.codeVideoBrief(card));
+    return parts.filter(Boolean).join('\n\n');
+  }
+
+  /** The opted-in tour shares the handover and player; only its scope varies by card. */
+  private codeVideoBrief(card: Item): string {
+    const guidance = this.o.adapter.demo?.code?.trim();
+    if (!guidance) return '';
+    const scope = card.contribution
+      ? 'After reviewing and making the behaviour demo, tour the contributor’s change from merge base to the PR head. Locate each review finding in the tour. A design problem needing a decision is a finding too: record it through findings, where the owner decides, rather than as a separate demo question.'
+      : card.prototypeOf
+        ? 'After the behaviour demo, make a 30–60 s code video showing the approach and structure, what would carry into a build on this branch and what is a shortcut. Keep the limited prototype brief; the tour does not call for tests, polish or production work.'
+        : "After the behaviour demo, tour this card's complete branch change from its base, not only the latest commit. Docs-only changes need none.";
+    return `${scope} Make the separate code video with ${this.demoSkill(card.id)} in code-video mode, and supply code_video (dir and chapters) in ready_for_review. After feedback you may keep the earlier code video or record another, as appropriate.${card.contribution ? ' On a new contributor head, check that the tour still covers the reviewed change and findings and update it where needed.' : ''} The owner watches and comments on it on the card; it stays private when the behaviour demo is shared or exported, and never goes to the contributor. Repository guidance for the tour:\n${guidance}`;
   }
 
   /**
@@ -5523,6 +5539,7 @@ ${idea.idea.brief}` : '',
         'Words of the owner\'s that ask the same in so many words (“send them finding 1”, “fix that yourself”) count the same. Anything else they say (a question, more to look at) you answer or do on the card, and nothing goes to the PR.',
       ].join('\n'),
     ];
+    parts.push(this.codeVideoBrief(card));
     return parts.filter(Boolean).join('\n\n');
   }
 

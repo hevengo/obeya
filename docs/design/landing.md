@@ -181,6 +181,16 @@ since the code is a stranger's and whatever of it runs, runs on the owner's mach
 3. A demo before (the merge base) and after (the head), the app run as `app.run` says.
 4. The checks on the head, and a merge probe against the current `main`.
 
+When `demo.code` is enabled, the required handover also includes a private code video made after
+the review and behaviour demo. It tours the contributor's whole change from merge base to PR
+head, following the normal code-video narration (see Code videos and git-backed change views),
+and locates each review finding in the structure or evidence. Design problems needing a decision
+are findings through the same mechanism below, not separate questions in the video. The tour
+never goes to the contributor, including in requests for changes, PR comments or a shared demo.
+After feedback the worker can retain a still-current tour. A new contributor head is reviewed
+again, with the tour checked against the new change and findings and updated where needed.
+An absent or blank `demo.code` leaves the behaviour-only handover in place.
+
 The findings are an element of the card of their own, beside the demo, above it in the left column:
 each with its number, a short title, a sentence or two and whether it is about security. The worker
 keeps them as it keeps nothing else, like an idea's agent its brief: the whole list after its review,

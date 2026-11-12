@@ -61,6 +61,14 @@ inclusive line ranges. Place them beside the claim in the narration order. Count
 generated files in the structure view rather than touring them. Tests and source can support
 claims about structure; a code video alone does not prove runtime behaviour or performance.
 
+For a **contributor review**, make the tour after reviewing the change. Use the merge base
+with the target branch through the pull-request head and locate each review finding in the
+structure or evidence where it belongs. A design problem needing an owner's decision is a
+review finding, recorded through the card's existing findings mechanism; its choices stay
+there. The code video is private to the owner's card and never goes into contributor comments,
+requests for changes or the shared behaviour demo. On a new head, review the change and findings
+again and update the tour wherever it no longer describes them. A still-current tour can stand.
+
 For a **prototype**, use the short form: **30–60 seconds**, showing the approach and structure,
 what would carry into a build on this branch, and what is a shortcut. Keep the limited build
 brief; it does not become production work for the sake of a tour. Keep the same evidence limits,

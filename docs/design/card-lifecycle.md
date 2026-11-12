@@ -92,7 +92,9 @@ and records the demo.
 `waiting: demo`: the card carries the demo (see The demo on the card); the owner approves or gives
 feedback. With a repository's `demo.code` enabled, a code-changing task also brings a private code
 video before its initial handover can be accepted; docs-only changes are exempt (see Code videos
-and git-backed change views). `ready_for_review` accepts it as `code_video`, a directory with
+and git-backed change views). Contributor reviews and prototypes also require it, with their
+respective narration rules (see Review cards and Prototypes). `ready_for_review` accepts it as
+`code_video`, a directory with
 `demo.mp4`, captions and chapter titles in order. A later handover may retain either video
 independently. Both can be watched and commented on before approval. Whatever the owner writes or
 says on the card goes to the worker at once, and the work

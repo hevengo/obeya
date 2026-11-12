@@ -178,3 +178,46 @@ describe('a task code video', () => {
   });
 
 });
+
+
+describe('a prototype code video', () => {
+  async function prototype() {
+    const idea = board.create({ idea: true, title: 'Navigation', x: 0, y: 0 });
+    const card = board.addPrototype(idea.id, 'Prototype: Compact navigation', 'Show the compact approach');
+    await workers.start(card.id);
+    return card;
+  }
+
+  test('requires a short tour while keeping the throwaway build brief, even without code changes', async () => {
+    const c = await prototype();
+    const brief = runtime.last.inbox[0]!;
+    expect(brief).toContain(guidance);
+    expect(brief).toContain('30–60 s code video');
+    expect(brief).toContain('approach and structure');
+    expect(brief).toContain('what would carry into a build on this branch');
+    expect(brief).toContain('what is a shortcut');
+    expect(brief).toContain('no tests, no polish, no docs or plan changes');
+    expect(brief).not.toContain('Before ready_for_review, run');
+    expect(brief).not.toContain('Docs-only changes need none');
+    expect(await runtime.last.call('ready_for_review', { summary: 'Prototype', demo: artifact() })).toContain('requires a code video');
+    expect(state(c.id)).toBe('working');
+    expect(await runtime.last.call('ready_for_review', { summary: 'Prototype', demo: artifact(), code_video: video('short-tour') })).toContain('End your turn');
+    const handover = board.item(c.id)!.codeVideo!.handover;
+    runtime.last.emit({ type: 'idle' });
+    workers.message(c.id, 'Explain the shortcut');
+    expect(await runtime.last.call('ready_for_review', { summary: 'Explained the shortcut' })).toContain('End your turn');
+    expect(board.item(c.id)!.codeVideo!.handover).toBe(handover);
+    workers.message(c.id, 'About the approach', [], false, undefined, { at: 2, video: 'code', demo: handover });
+    expect(board.events(c.id).at(-1)!.spot).toMatchObject({ video: 'code', narration: 'short-tour.' });
+  });
+
+  test('disabled prototypes keep the behaviour-only handover', async () => {
+    for (const demo of [undefined, { code: '' }]) {
+      await setup({ ...generic, land: 'main', workspaces: 'clones', demo });
+      const c = await prototype();
+      expect(runtime.last.inbox[0]).not.toContain('Repository guidance for the tour');
+      expect(await runtime.last.call('ready_for_review', { summary: 'Prototype', demo: artifact() })).toContain('End your turn');
+      expect(board.item(c.id)!.codeVideo).toBeUndefined();
+    }
+  });
+});
