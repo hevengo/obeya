@@ -14,7 +14,7 @@ import { repoName } from '../adapters/generic';
 import type { RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
-import { AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, awaitsContributorNext, type AgentSetting, buildableOn, type CanvasConfig, prototypeBuild, prototypeName, type CardAction, untouched, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, pausable, halted, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, SHARED_FIELDS, type SharedSettings, type Skill, type SpotInput, type TrustGroup, type DemoSite } from '../core/types';
+import { stopped, AGENT_DEFAULTS, agentListens, type AgentRole, awaited, type Awaited, awaitsContributorNext, type AgentSetting, buildableOn, type CanvasConfig, prototypeBuild, prototypeName, type CardAction, untouched, type CardPatch, type ConfigProblemCode, finished, type Item, layerSettings, nameless, needsYou, NEW_REPO_HOLD_MS, pausable, halted, snoozable, SNOOZE_LIMIT, type PendingRestart, plannableAsProject, plannedToStart, type RepoConfig, type RepoRef, repoShape, type ProposedSetting, type RepoSettings, type SettingsShared, SHARED_FIELDS, type SharedSettings, type Skill, type SpotInput, type TrustGroup, type DemoSite } from '../core/types';
 import { holdsNotes } from '../core/queue';
 import { BadRequest, Board, DEMO_LOOK_MS, pathOfRef, repoOfRef, replyNote, type StoredContribution } from './board';
 import type { ChangeRoute } from '../core/types';
@@ -2020,6 +2020,14 @@ export class CanvasRuntime {
     releaseHeld(this.board, card.id);
     this.board.work(card.id, PLANNED_AGAIN);
     this.board.log(card.id, 'state', 'owner', card.pr ? t.stoppedPrOpen(card.pr.number) : t.stopped);
+  }
+
+  /** Archives a stopped card after checking whether work kept at Stop has since landed by hand. */
+  async archive(cardId: string) {
+    const card = this.board.item(cardId);
+    if (card && stopped(card) && card.kind === 'task' && card.source === 'manual' && !card.prototypeOf && !card.queue && card.workspace && !card.repoDown)
+      await this.repoOf(card).workers.freeStoppedWorkspace(cardId, true);
+    this.board.archive([cardId]);
   }
 
   /** Brings a deleted card back (the owner's undo), with the workspace it had where that is still free. */

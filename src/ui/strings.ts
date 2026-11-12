@@ -2155,6 +2155,7 @@ const de = {
     unarchive: 'Zurück auf die Leinwand',
     /** Why a stopped task whose workspace holds work cannot go into the archive. */
     holdsWork: 'Auf dem Branch liegt Arbeit, die noch nicht gelandet ist: neu starten oder löschen.',
+    checkWork: 'Prüft, ob die Arbeit gelandet ist, und archiviert die gestoppte Karte.',
     archived: (title: string) => `„${title}“ archiviert.`,
     archivedMany: (n: number) => (n === 1 ? '1 Karte archiviert.' : `${n} Karten archiviert.`),
     unarchived: (title: string) => `„${title}“ ist zurück auf der Leinwand.`,
@@ -4292,6 +4293,7 @@ const en: Strings = {
     archiveDone: (n: number) => (n === 1 ? 'Archive 1 finished card' : `Archive ${n} finished cards`),
     unarchive: 'Back onto the canvas',
     holdsWork: 'Its branch holds work that has not landed: start it again or delete it.',
+    checkWork: 'Checks that the work has landed, then archives the stopped card.',
     archived: (title: string) => `“${title}” archived.`,
     archivedMany: (n: number) => (n === 1 ? '1 card archived.' : `${n} cards archived.`),
     unarchived: (title: string) => `“${title}” is back on the canvas.`,

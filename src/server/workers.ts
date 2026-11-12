@@ -12,7 +12,7 @@ import { basename, isAbsolute, join } from 'node:path';
 import { type CardFile, changeSize, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
 import { DEFAULT_DEMO_DIRECTORY } from '../../plugin/skills/demo/lib/settings.ts';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
-import { answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, pausableNow, type WorkerTurn, type CardLanding, type Demo, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, prototypeBuild, prototypeName, type Question, type RepoRef, type RepoSettings, type RestartReason, type Share, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started, type ApproveResult, cardAgentOf, type ChangeRoute, type Clash, type Finding, type FindingStatus, type Harness, type HeldChanges, type PageTags, PUSH_HOLD_MS } from '../core/types';
+import { stopped, answering, askable, type Awaited, AWAITED_STATES, awaited, type BackgroundTask, pausable, pausableNow, type WorkerTurn, type CardLanding, type Demo, type DemoKind, type DemoPage, finished, formatQuestion, handedOver, type Item, type TaskAuthor, taskAuthor, type Mock, ownWords, pickedAnswer, prototypeBuild, prototypeName, type Question, type RepoRef, type RepoSettings, type RestartReason, type Share, type Snooze, SNOOZE_LIMIT, type Spot, type Superseded, type SpotInput, started, type ApproveResult, cardAgentOf, type ChangeRoute, type Clash, type Finding, type FindingStatus, type Harness, type HeldChanges, type PageTags, PUSH_HOLD_MS } from '../core/types';
 import { BadRequest, type Board, pathOfRef, replyNote, type Retracted, type StoredDemo, titleKey, contributionOf, type PrState, type Shipped, type StoredContribution, type StoredNewRepo } from './board';
 import { parsePlanDoc } from '../core/plan-doc';
 import { type Asked, decisionLog, toQuestion, withPick } from './advisor';
@@ -2918,12 +2918,18 @@ export class Workers {
     this.takeHeld(cardId);
     this.end(cardId);
     this.bump(cardId);
-    const generation = this.generation.get(cardId);
-    const path = this.o.board.row(cardId).workspace;
     this.o.board.work(cardId, PLANNED_AGAIN);
     said();
-    return this.o.workspaces.hasWork(cardId).then((keep) => {
-      if (keep || this.generation.get(cardId) !== generation || this.o.board.row(cardId).workspace !== path) return;
+    return this.freeStoppedWorkspace(cardId);
+  }
+
+  /** Rechecks a stopped card's workspace before archiving; a manual merge may have landed its work since Stop. */
+  freeStoppedWorkspace(cardId: string, refresh = false): Promise<void> {
+    const generation = this.generation.get(cardId);
+    const path = this.o.board.row(cardId).workspace;
+    return this.o.workspaces.hasWork(cardId, refresh).then((keep) => {
+      const card = this.o.board.item(cardId);
+      if (keep || !card || !stopped(card) || card.queue || this.generation.get(cardId) !== generation || this.o.board.row(cardId).workspace !== path) return;
       this.o.workspaces.release(cardId);
       this.o.board.work(cardId, { workspace: null });
     });

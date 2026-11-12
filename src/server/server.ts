@@ -813,7 +813,7 @@ export function serve(
         DELETE: on(async (c, req) => { const { from, to } = (await fields(req)) as { from: string; to: string }; c.board.connect(from, to, true); }),
       },
       '/api/c/:canvas/cards/:id/restore': { POST: on((c, req) => c.restore(req.params.id!)) },
-      '/api/c/:canvas/cards/:id/archive': { POST: on((c, req) => c.board.archive([req.params.id!])) },
+      '/api/c/:canvas/cards/:id/archive': { POST: on((c, req) => c.archive(req.params.id!)) },
       '/api/c/:canvas/cards/:id/unarchive': { POST: on((c, req) => c.board.unarchive(req.params.id!)) },
       // the archive, newest first, a page at a time (`count`, `after`: the page before's `next`), each project
       // with its workstreams; `q`: those holding its words (`from`: the page before's `next`; `labels`:
