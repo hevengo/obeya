@@ -1965,13 +1965,14 @@ function DemoView({
   const firstShown = useRef(true);
   useEffect(() => {
     if (firstShown.current) return void (firstShown.current = false);
+    cancelSeek.current?.();
+    cancelSeek.current = null;
     setNow(0);
     const v = video.current;
     const from = playFrom.current;
     playFrom.current = null;
     if (!v) return;
     if (from === null) return setStarted(false);
-    cancelSeek.current?.();
     const cancel = playAt(v, from, () => setStarted(false));
     cancelSeek.current = cancel;
     return cancel;
