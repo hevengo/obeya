@@ -6,12 +6,13 @@
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { AGENT_EFFORTS, AGENT_ROLES, AGENT_SPEEDS, type AgentEffort, type AgentModel, type AgentRole, type AgentSetting, type AgentSpeed, type AgentsView, type Harness, HARNESSES, modelChoices, type ModelChoice, blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSettings, type DemoSettingsView, type DemoSpaceView, type DemoSite, type DemoVoiceCheck, type FilledClones, type PersonalSiteView, type SiteSetupJob, type TagProposalJob, type Language, type HostConfig, type LanguageView, type NarrationLanguage, restartsAgents, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, type PageTags, type SetupCheck, START_FAILED, type Theme, THEMES, type ThemeView, type UsageMeterView, type CostsView, type VoiceKind, type VoiceSetupView, withClones } from '../core/types';
 import { lineDiff } from '../core/diff';
+import { DEFAULT_CODE_VIDEO } from '../core/code-video';
 import { parseTagLines, tagLines } from '../core/page-tags';
 import { knownLanguage, LANGUAGES } from '../core/locale';
 import { AccessSection } from './access';
 import { HarnessUpdate } from './agentPick';
 import { api, reload, type SiteHow } from './api';
-import { keepConfigDraft, keptConfigDraft } from './configDraft';
+import { keepConfigDraft, keptConfigDraft, savedConfigDraft } from './configDraft';
 import { keep } from './keep';
 import { plain } from './markdown';
 import { FolderPick } from './folderPick';
@@ -417,15 +418,19 @@ export function ConfigDialog({ on, page, onClose, onSetup, onAsk, onTalk, onProb
                   setBusy(true);
                   let applies = false;
                   try {
-                    const { restarting, applied } = await api.saveConfig(draft);
-                    // what is saved now is the draft as last checked; settings applied at once change what the
-                    // repositories amount to (where "For everyone" goes, say), so it is read and checked again
+                    // Keep the server's normalized draft, including defaults for new repositories,
+                    // so another edit and save cannot silently drop those defaults.
+                    const saving = (await api.checkConfig(draft)).canvases;
+                    const { restarting, applied } = await api.saveConfig(saving);
+                    // Settings applied at once change what the repositories amount to
+                    // (where "For everyone" goes, say), so they are read and checked again.
                     const fresh = applied ? await api.config() : null;
                     savedSeq.current++;
                     setSaved(checked);
-                    setView({ ...(fresh ?? view), canvases: draft, restarting });
+                    setDraft((current) => savedConfigDraft(draft, saving, current));
+                    setView({ ...(fresh ?? view), canvases: saving, restarting });
                     checkSaved();
-                    setStatus(restarting ? c.saved : applied ? (restartsAgents(view.canvases, draft) ? c.savedRestarts : c.savedApplied) : c.savedOnly);
+                    setStatus(restarting ? c.saved : applied ? (restartsAgents(view.canvases, saving) ? c.savedRestarts : c.savedApplied) : c.savedOnly);
                     applies = !restarting;
                   } catch (e) {
                     setStatus(failText(e));
@@ -1999,6 +2004,7 @@ function RepoSettingsBlock({
   onChange: (s: RepoSettings | undefined) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const codeBox = useRef<HTMLTextAreaElement>(null);
   const [shown, setShown] = useState<string | null>(null);
   useEffect(() => {
     if (!show) return;
@@ -2018,6 +2024,7 @@ function RepoSettingsBlock({
     return n ? (s[n[0]] as Record<string, unknown> | undefined)?.[n[1]] : s[k as keyof RepoSettings];
   };
   const value = <T,>(k: SettingKey) => (own(k) ?? base[k].value) as T;
+  useFitHeight(codeBox, value<string>('code'), !folder);
   const set = (k: SettingKey, v: unknown) => {
     const next: Record<string, unknown> = { ...s };
     const n = nestedOf(k);
@@ -2161,7 +2168,10 @@ function RepoSettingsBlock({
         {!folder && row(
           'code',
           c.codeVideo,
-          <textarea aria-label={c.codeVideo} value={value<string>('code')} onChange={(e) => set('code', e.target.value)} />,
+          <>
+            <textarea ref={codeBox} rows={3} aria-label={c.codeVideo} value={value<string>('code')} onChange={(e) => set('code', e.target.value)} />
+            {!value<string>('code').trim() && <button type="button" className="btn small" onClick={() => set('code', DEFAULT_CODE_VIDEO)}>{c.codeVideoDefault}</button>}
+          </>,
           c.codeVideoHint,
         )}
         {row(

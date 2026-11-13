@@ -9,6 +9,7 @@ import { Config } from './config';
 import { Store } from './db';
 import { FakeRuntime, gitRepo, noForge, removeDir, until } from './testing';
 import { git } from './workspaces';
+import { DEFAULT_CODE_VIDEO } from '../core/code-video';
 
 let dir: string;
 let globalConfig: string | undefined;
@@ -88,7 +89,7 @@ describe('building an idea in a new repository', () => {
     expect(git(path, 'log', '--format=%an %s')).toBe('Ada Lovelace First commit');
     expect(existsSync(join(path, '.gitignore'))).toBe(true);
     expect(git(path, 'remote')).toBe('');
-    expect(JSON.parse(readFileSync(join(dir, 'canvases.json'), 'utf8')).at(-1)).toEqual({ repos: [{ path }] });
+    expect(JSON.parse(readFileSync(join(dir, 'canvases.json'), 'utf8')).at(-1)).toEqual({ repos: [{ path, settings: { demo: { code: DEFAULT_CODE_VIDEO } } }] });
     expect(there.board.canvas.name).toBe('super59');
     // the card is there, decided as "Build it like this" decides it, with its conversation, decisions and screenshot, out of its group
     await until(() => there.board.item(card.id)?.queue || there.board.item(card.id)?.state === 'working');
@@ -120,6 +121,7 @@ describe('building an idea in a new repository', () => {
     expect(brief).toContain('This repository is new');
     expect(brief).toContain('obeya:settings');
     expect(brief).toContain('CLAUDE.md');
+    expect(brief).toContain(DEFAULT_CODE_VIDEO);
   });
 
   test('"Undo" in the undo window leaves everything as it was', async () => {

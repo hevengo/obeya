@@ -242,7 +242,14 @@ field of `app` and `demo` is a setting of its own, so this machine may set `app.
 `app.run` to the repository. `demo.code` is optional prose enabling a private code
 walkthrough, with the owner's lens for architecture, boundaries and patterns. "Code video" in
 Configuration edits it on this machine and can take it over for everyone; blank disables it even
-when the repository enables it. Workers of tasks, contributor reviews and prototypes receive the prose with their briefs. See Code videos
+when the repository enables it. A newly created or added git repository receives standard code-video
+guidance on this machine unless its local or shared settings explicitly name a value, including a
+blank. The guidance asks for architecture, responsibilities, dependencies, boundaries, pattern
+choices, alternatives and source evidence, using the repository’s instructions and design docs.
+Existing repositories keep their values, including an absent one. An empty "Code video" field
+offers "Set default", which fills in the same guidance for editing and saving with the other
+settings. Folders without git receive no code-video default. Workers of tasks, contributor reviews
+and prototypes receive the prose with their briefs. See Code videos
 and git-backed change views for the handover rules.
 
 Precedence, highest first: this machine's values, `.obeya/settings.json`, detection (main branch,

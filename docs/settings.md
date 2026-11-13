@@ -160,7 +160,7 @@ Each of the three is a setting of its own: this machine may set one and leave th
 repository. `stop` and `keep` from the file run only once you trusted them (see Commands you trust).
 Default: none.
 
-### `demo` — `{ language?, site? }`
+### `demo` — `{ language?, code?, site? }`
 
 Demos: every handover brings one, a narrated video recorded with Obeya's demo skill or an HTML
 page for something to look at; the worker picks which, and runs the app for it as `app.run` says.
@@ -172,8 +172,13 @@ page for something to look at; the worker picks which, and runs the app for it a
   Obeya finds it in the repository's `.obeya/settings.json`. A voice that clones a clip uses the
   clip of this language, so each machine's demo settings name one per language.
 
-- `code`: optional prose enabling a second, private video for code-changing tasks, contributor reviews
-  and prototypes. Describe what
+- `code`: prose enabling a second, private video for code-changing tasks, contributor reviews
+  and prototypes. When a git repository is created or added through Obeya, it starts with standard
+  guidance on this machine unless it already sets this field locally or in its shared settings.
+  The guidance covers architecture, responsibilities, dependencies, boundaries, pattern choices,
+  alternatives and evidence. Existing repositories keep their settings. In Configuration, an empty
+  "Code video" field offers "Set default" to fill in this guidance; edit it as needed and save.
+  Describe what
   the owner looks for in patterns, architecture and domain boundaries, and point to the repository's
   design docs. For example: `"Explain the boundaries in docs/design.md and why each pattern fits.
   Prefer simple designs without speculative abstraction."` An absent or blank value leaves this off;

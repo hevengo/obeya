@@ -1,10 +1,29 @@
 import { expect, test } from 'bun:test';
-import { keepConfigDraft, keptConfigDraft } from './configDraft';
+import { keepConfigDraft, keptConfigDraft, savedConfigDraft } from './configDraft';
+import type { CanvasConfig } from '../core/types';
 
 const store = () => {
   const m = new Map<string, string>();
   return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
 };
+
+test('saving adopts generated code guidance and retains edits made during the request', () => {
+  const before: CanvasConfig[] = [{ repos: [{ path: '/new', settings: { setup: 'first' } }] }];
+  const saved: CanvasConfig[] = [{ repos: [{ path: '/new', settings: { setup: 'first', demo: { code: 'Explain the boundaries.' } } }] }];
+  expect(savedConfigDraft(before, saved, before)).toBe(saved);
+  const edited: CanvasConfig[] = [{ name: 'Renamed', repos: [{ path: '/new', settings: { setup: 'typed while saving' } }, { path: '/another' }] }];
+  const result = savedConfigDraft(before, saved, edited);
+  expect(result).toEqual([{ name: 'Renamed', repos: [
+    { path: '/new', settings: { setup: 'typed while saving', demo: { code: 'Explain the boundaries.' } } },
+    { path: '/another' },
+  ] }]);
+  expect(edited[0]!.repos[0]!.settings?.demo).toBeUndefined();
+  for (const code of ['', 'Custom guidance']) {
+    const changed: CanvasConfig[] = [{ repos: [{ path: '/new', settings: { demo: { code } } }] }];
+    expect(savedConfigDraft(before, saved, changed)).toEqual(changed);
+  }
+  expect(savedConfigDraft(before, saved, [{ repos: [] }])).toEqual([{ repos: [] }]);
+});
 
 test('a draft not saved yet comes back after a reload, until it is saved', () => {
   const s = store();

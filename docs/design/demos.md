@@ -57,8 +57,9 @@ without Obeya. When both are requested the worker makes the behaviour demo first
 video in its own directory. The behaviour recipe's omission of code and requirement for an
 app view apply to that mode alone.
 
-A repository opts in with `demo.code`, prose describing what its owner values and where its
-boundaries are documented (see Repository settings). Absent or blank leaves it off. Code-changing
+A repository enables code videos with `demo.code`, prose describing what its owner values and
+where its boundaries are documented (see Repository settings for the guidance given to newly
+created or added repositories and "Set default"). Absent or blank leaves it off. Code-changing
 tasks then require a separate code video with their initial handover; docs-only tasks do not.
 The check covers the complete card change, including deleted code and earlier commits. A change
 is docs-only when every changed path is a prose document (`.md`, `.rst`, `.adoc`, `.asciidoc`,
