@@ -32,13 +32,13 @@ export type CardState = (typeof STATES)[number];
 /** A card whose work is over: `live` once it landed, `done` when it needed no change to the code (a demo, an analysis). */
 export const finished = (s: CardState) => s === 'live' || s === 'done';
 /** A card an agent worked on until the owner stopped it: planned again, its branch stays the card's. */
-export const stopped = (i: Pick<Item, 'state' | 'branch' | 'unstarted'>) => i.state === 'planned' && !!i.branch && !i.unstarted;
+export const stopped = (i: Pick<Item, 'state' | 'branch' | 'projectFolder' | 'unstarted'>) => i.state === 'planned' && (!!i.branch || !!i.projectFolder) && !i.unstarted;
 /**
  * A stopped card of the owner's the archive may take: nothing waits to start it, and its workspace
  * holds no work (a branch with commits or changes keeps it, and archiving would leave that work
  * unseen in a clone), or its repository does not run on the canvas, where nothing shows that work anyway.
  */
-export const stoppedArchivable = (i: Pick<Item, 'state' | 'branch' | 'unstarted' | 'source' | 'queue' | 'workspace' | 'keptIn' | 'prototypeOf' | 'kind' | 'repoDown'>) =>
+export const stoppedArchivable = (i: Pick<Item, 'state' | 'branch' | 'projectFolder' | 'unstarted' | 'source' | 'queue' | 'workspace' | 'keptIn' | 'prototypeOf' | 'kind' | 'repoDown'>) =>
   stopped(i) && i.source === 'manual' && i.kind === 'task' && !i.prototypeOf && !i.queue && ((!i.workspace && !i.keptIn) || !!i.repoDown);
 /** A finished card of the owner's whose agent is done: the archive may take it. */
 export const finishedArchivable = (i: Pick<Item, 'state' | 'source' | 'finishing'>) => finished(i.state) && i.source === 'manual' && !i.finishing;
@@ -85,8 +85,8 @@ export const halted = (i: Pick<Item, 'paused' | 'pausing' | 'snoozed'>) => (!!i.
  * A finished card an agent worked on, on the canvas, with no agent on it now: what the owner asks
  * about it resumes the agent that did the work, which answers and ends again.
  */
-export const askable = (i: Pick<Item, 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
-  finished(i.state) && !!i.branch && !i.prototypeOf && !i.archivedAt && !i.finishing;
+export const askable = (i: Pick<Item, 'state' | 'branch' | 'projectFolder' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
+  finished(i.state) && (!!i.branch || !!i.projectFolder) && !i.prototypeOf && !i.archivedAt && !i.finishing;
 
 /**
  * How many cards of each group are still to be done: not finished, not archived, not a dropped
@@ -100,7 +100,7 @@ export function openPerGroup(items: Item[]): Map<string, number> {
 }
 
 /** A workstream a prototype can be built for: nobody has worked on it yet, and the Coordinator does not hold it. */
-export const buildableOn = (i: Item) => i.state === 'planned' && !i.branch && !i.queue;
+export const buildableOn = (i: Item) => i.state === 'planned' && !i.branch && !i.projectFolder && !i.queue;
 
 /**
  * A planned task nobody has worked on yet, which the Coordinator may merge with others or delete:
@@ -108,7 +108,7 @@ export const buildableOn = (i: Item) => i.state === 'planned' && !i.branch && !i
  * review's follow-up task waiting for the PR's merge, say), and no prototype nor becoming a project.
  */
 export const untouched = (i: Item) =>
-  i.kind === 'task' && i.source === 'manual' && i.state === 'planned' && !i.branch && !i.workspace && (!i.queue || 'behind' in i.queue) && !i.prototypeOf && !i.becomesProject;
+  i.kind === 'task' && i.source === 'manual' && i.state === 'planned' && !i.branch && !i.projectFolder && !i.workspace && (!i.queue || 'behind' in i.queue) && !i.prototypeOf && !i.becomesProject;
 
 /**
  * A task of the owner's that can still be planned as a project, as an idea can: planned, nobody has
@@ -189,7 +189,7 @@ export const answering = (i: Pick<Item, 'state' | 'need' | 'answering'>) => hand
  * does, the words wait for the rework after it). The words then go straight to it; on any other
  * card they go to the Coordinator.
  */
-export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
+export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'projectFolder' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
   !i.archivedAt && (i.kind === 'question' || i.state === 'idea' || i.state === 'proposal' || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i));
 
 /**
@@ -433,6 +433,8 @@ export interface Item {
   branch?: string;
   /** Where the branch is checked out, while the card has a workspace: a directory, `host:/dir` on another machine. */
   workspace?: string;
+  /** This run works in the configured git checkout. */
+  projectFolder?: true;
   /** The clone that keeps its branch since its workspace was taken from it, until it works again (the same form as `workspace`). */
   keptIn?: string;
   /** Files the Coordinator expects the card to change. */
@@ -1157,6 +1159,8 @@ export interface CanvasInfo {
 }
 
 export interface RepoRef {
+  /** Ordinary new tasks default to the configured checkout. */
+  projectFolder?: true;
   id: string;
   name: string;
   path: string;
@@ -2043,7 +2047,7 @@ export interface RepoSettings {
    */
   softPaths?: string[];
   /** Workers get full clones from a pool, or a worktree of the Obeya checkout per card. */
-  workspaces?: 'clones' | 'worktrees';
+  workspaces?: 'clones' | 'worktrees' | 'project-folder';
   /** Accounts whose pull request comments are not review feedback (deploy bots and the like). */
   prNoise?: string[];
   /**
@@ -2155,7 +2159,7 @@ export interface RepoValues {
   setup: SettingValue<string>;
   planDocs: SettingValue<{ dir: string; exclude: string[] }>;
   softPaths: SettingValue<string[]>;
-  workspaces: SettingValue<'clones' | 'worktrees'>;
+  workspaces: SettingValue<'clones' | 'worktrees' | 'project-folder'>;
   prNoise: SettingValue<string[]>;
   language: SettingValue<Language>;
   app: { run: SettingValue<string>; stop: SettingValue<string>; keep: SettingValue<string> };
@@ -2252,7 +2256,8 @@ export interface ResolvedCanvas {
   name: string;
   repos: {
     id: string;
-    workspaces: 'clones' | 'worktrees';
+    workspaces: 'clones' | 'worktrees' | 'project-folder';
+    projectFolderUnavailable?: true;
     /** A folder without git (`RepoConfig.git` false): no branch, landing, clones or hosts. */
     folder?: true;
     /**

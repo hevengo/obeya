@@ -22,6 +22,7 @@ import { oneAtATime } from '../core/one-at-a-time';
 import { demoFile } from './demo-page';
 import { sameRemote } from './repo';
 import { spawnOutput } from './spawn';
+import { ownGitWrite } from './own-writes';
 
 export class WorkspaceError extends Error {
   constructor(
@@ -178,7 +179,8 @@ export async function hasCommit(cwd: string, c: string): Promise<boolean> {
 async function gitRun(cwd: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   const there = remoteWorkspace(cwd);
   if (there) return there.host.run(['git', ...TOKEN_HELPER_ARGS, '-C', there.path, ...args], { cwd: there.path });
-  return spawnOutput([GIT, '-C', cwd, ...args]);
+  const run = () => spawnOutput([GIT, '-C', cwd, ...args]);
+  return args.some((a) => ['checkout', 'switch', 'merge', 'pull', 'reset', 'rebase', 'cherry-pick', 'read-tree'].includes(a)) ? ownGitWrite(cwd, run, args) : run();
 }
 
 /**
@@ -584,6 +586,8 @@ const SHORT_TEXT = { none: 'no workspace registered or all are leased', dirty: '
  * (`FolderWorkspaces` in `folder.ts`, which has no branches and lands nothing).
  */
 export interface CardWorkspaces {
+  /** Per-card tracking when a git repository also runs tasks in its checkout. */
+  folderFor?(cardId: string): import('./folder').FolderWorkspaces | null;
   readonly mode: 'clones' | 'worktrees' | 'folder';
   readonly dir: string;
   readonly pooled: boolean;
@@ -986,6 +990,11 @@ export class Workspaces implements CardWorkspaces {
   leasable(overSlots = false, near: string | null = null): boolean {
     if (this.o.mode === 'worktrees') return overSlots || this.room(null);
     return 'path' in this.place(overSlots, near);
+  }
+
+  /** Capacity on this machine, independent of whether a separate clone is available. */
+  hasLocalSlot(): boolean {
+    return this.room(null);
   }
 
   /** The machines in the order a new card looks for room; a machine whose clones are registered but no longer configured comes last. */

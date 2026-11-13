@@ -394,8 +394,8 @@ const machine = new MachineSetup({ home, config, voice: voiceSetup, harnesses })
 welcome(home, canvases.all());
 // Claude Code on the hosts the canvases registered, so the first menu of models has whether it is behind there
 harnesses.lookAtHosts();
-const shutdown = (code: number) => {
-  canvases?.shutdown();
+const shutdown = async (code: number) => {
+  const stopped = canvases?.shutdown();
   usage.stop();
   demoSpace.stop();
   endAgentsHere();
@@ -405,6 +405,7 @@ const shutdown = (code: number) => {
   access.release();
   transcriber.stop();
   narration.stop();
+  await stopped;
   // the supervisor stays across a restart, and gives the entry up when it ends
   if (!process.env.OBEYA_SUPERVISED) (code === TAKEOVER ? takenOver : release)(home, process.pid);
   process.exit(code);

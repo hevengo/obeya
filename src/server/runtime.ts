@@ -507,7 +507,7 @@ export const sdkRuntime: AgentRuntime = {
     const ownTools = spec.tools.map((t) => `mcp__obeya__${t.name}`);
     const claude = there ? 'claude' : claudeExecutable();
     // a watched call's end is waited for before the agent goes on
-    const watched = spec.watch ? [{ hooks: [async (input: HookInput) => (await spec.watch!.after(toolCall(input)), {})] }] : [];
+    const tracking = trackingHooks(spec.watch);
     // what Claude Code here last said on stderr, for a session that ends with an error
     let stderr = '';
     const q = query({
@@ -545,7 +545,7 @@ export const sdkRuntime: AgentRuntime = {
         hooks: {
           PreToolUse: [
             { matcher: 'mcp__obeya__.*', hooks: [async () => ownToolAllowed] },
-            ...(spec.watch ? [{ hooks: [async (input: HookInput) => (await spec.watch!.before(toolCall(input)), {})] }] : []),
+            ...tracking.PreToolUse,
             {
               matcher: 'Bash',
               hooks: [
@@ -560,11 +560,11 @@ export const sdkRuntime: AgentRuntime = {
           ],
           // a subagent's step would pass it to the subagent, which the agent may never hear of
           PostToolUse: [
-            ...watched,
+            ...tracking.PostToolUse,
             { hooks: [async (input) => withContext('PostToolUse', input.agent_id ? undefined : spec.contextUpdate?.())] },
           ],
           PostToolUseFailure: [
-            ...watched,
+            ...tracking.PostToolUseFailure,
             { hooks: [async (input) => withContext('PostToolUseFailure', input.agent_id ? undefined : spec.contextUpdate?.())] },
           ],
         },
@@ -905,6 +905,16 @@ export function refuseForegroundWait(input: HookInput): HookJSONOutput {
       permissionDecision: 'deny',
       permissionDecisionReason: `Not run: this command sleeps in the foreground for more than ${FOREGROUND_SLEEP_LIMIT} seconds (or in a loop with no bound), and a note from the owner reaches you only once a command is done. Wait in the background instead: run it with run_in_background, or watch for the condition with Monitor, and end your turn; you are woken when it finishes or fires. A short wait may stay in the foreground if bounded to ${FOREGROUND_SLEEP_LIMIT} seconds, e.g. \`${BOUNDED_WAITS[0]}\` or, where \`timeout\` is installed, \`${BOUNDED_WAITS[1]}\`.`,
     },
+  };
+}
+
+/** The SDK hooks that bracket actual writes, including a tool that fails after writing. */
+export function trackingHooks(watch?: ToolWatch) {
+  const after = watch ? [{ hooks: [async (input: HookInput) => (await watch.after(toolCall(input)), {})] }] : [];
+  return {
+    PreToolUse: watch ? [{ hooks: [async (input: HookInput) => (await watch.before(toolCall(input)), {})] }] : [],
+    PostToolUse: after,
+    PostToolUseFailure: after,
   };
 }
 

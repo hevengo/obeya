@@ -4,7 +4,9 @@ A chapter of the [design doc](../design.md), whose header says how it is written
 
 ### How work lands
 
-In a folder without git nothing lands (see Folders without git). Elsewhere the setting `land`
+In a folder without git or a task running in the project folder nothing lands (see Agents and
+workspaces). Approval marks an in-place task done and leaves the changes uncommitted unless the
+task explicitly committed them; no approval commit is made. Elsewhere the setting `land`
 decides (see Repository settings), read at each approval: `pr` sends the worker into the PR loop;
 `main` rebases the branch onto `main` and fast-forwards the local checkout, and the card is `live`.
 Unset, it is `pr` where `origin` is on GitHub (github.com or a subdomain, Enterprise Cloud's

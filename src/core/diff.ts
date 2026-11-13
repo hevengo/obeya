@@ -29,6 +29,7 @@ export interface DiffFile {
 
 /** What a card changed in a folder without git (design: Folders without git), as its change list shows it. */
 export interface FolderChanges {
+  project?: true;
   /**
    * Which undo the card has: `full` from a clone of the folder taken at its start (where the file
    * system clones), `partial` from copies of what its editing tools overwrote and of the folder's

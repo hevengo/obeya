@@ -45,7 +45,7 @@ export const settingsShape = z
     setup: z.string().optional(),
     planDocs: planDocs.optional(),
     softPaths: strings.optional(),
-    workspaces: z.enum(['clones', 'worktrees']).optional(),
+    workspaces: z.enum(['clones', 'worktrees', 'project-folder']).optional(),
     prNoise: strings.optional(),
     language: z.enum(LANGUAGES).optional(),
     app: app.optional(),

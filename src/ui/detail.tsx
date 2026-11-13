@@ -163,8 +163,8 @@ export function Detail(p: Props) {
     .filter(([, route]) => route === 'contributor' || route === 'self')
     .map(([id]) => Number(id));
   // in a folder without git the card's change list takes the place of its branch
-  const inFolder = !!p.repos.find((r) => r.id === item.repo)?.folder;
-  const changes = useFolderDiff(item, inFolder && item.kind === 'task' && !!item.branch);
+  const inFolder = item.projectFolder || !!p.repos.find((r) => r.id === item.repo)?.folder;
+  const changes = useFolderDiff(item, inFolder && item.kind === 'task' && (!!item.branch || !!item.projectFolder));
   // the tab the left column shows: a file picked there or in the change list beside the handover
   const [tab, setTab] = useState<string | null>(null);
   // Obeya reads what is typed here when no agent listens on the card: the field says so, as the microphone does
@@ -284,7 +284,7 @@ export function Detail(p: Props) {
   );
   const prototypeActions = item.prototypeOf && (
     <>
-      {item.branch && buildable && buildOn(t.idea.buildPrototype)}
+      {(item.branch || item.projectFolder) && buildable && buildOn(t.idea.buildPrototype)}
       <button className="btn" onClick={() => act({ action: 'discard' }, { close: true, ack: t.idea.discarded })}>
         {t.idea.discard}
       </button>
@@ -301,7 +301,7 @@ export function Detail(p: Props) {
     <ApproveReview item={item} act={act} />
   ) : inFolder ? (
     <>
-      <button className="btn primary" title={item.noChange ? undefined : t.folder.approveHint} onClick={() => act({ action: 'approve' }, item.noChange ? { close: true, ack: t.approvedNoChange } : { close: true, ack: t.folder.approved })}>
+      <button className="btn primary" title={item.noChange ? undefined : item.projectFolder ? t.folder.projectApproveHint : t.folder.approveHint} onClick={() => act({ action: 'approve' }, item.noChange ? { close: true, ack: t.approvedNoChange } : { close: true, ack: t.folder.approved })}>
         {item.noChange ? t.approveNoChange : t.approve}
       </button>
       <DiscardChanges diff={changes.diff} act={act} onDone={changes.reload} />
@@ -605,7 +605,7 @@ export function Detail(p: Props) {
                 )}
                 {(item.state === 'inPr' || item.state === 'waiting') && item.morePrs?.map((pr) => <PrBox key={pr.url} pr={pr} />)}
                 {item.state === 'inPr' && !item.pr && <p className="hint">{t.pr.opening}</p>}
-                {item.finishing && finished(item.state) && <p className="hint">{item.followUp ? t.followingUpLong : item.restartPaused ? (item.state === 'done' ? t.restartPause.doneLong : t.restartPause.liveLong) : item.state === 'done' ? t.finishingDoneLong : t.finishingLong}</p>}
+                {item.finishing && finished(item.state) && <p className="hint">{item.followUp ? t.followingUpLong : item.restartPaused ? (item.state === 'done' ? t.restartPause.doneLong : t.restartPause.liveLong) : item.state === 'done' ? item.projectFolder ? t.folder.finishing : t.finishingDoneLong : t.finishingLong}</p>}
                 {brief}
               </>
             )
@@ -646,7 +646,7 @@ export function Detail(p: Props) {
                 <button
                   className="btn primary"
                   disabled={!!fresh && !fresh.ready}
-                  title={fresh?.hint ?? (inFolder ? t.folder.startHint : t.startHint)}
+                  title={fresh?.hint ?? ((inFolder || (repoRef?.projectFolder && !item.parent && !item.prototypeOf && !item.builtOn)) ? t.folder.startHint : t.startHint)}
                   onClick={() => act({ action: 'start' }, { close: false })}
                 >
                   {fresh?.button ?? t.start}

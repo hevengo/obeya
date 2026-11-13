@@ -536,10 +536,10 @@ export const obeyaWorks = (talk: Exchange[]) =>
  * conversation. A workstream planned again after a part of it landed has no branch until its rest
  * starts, and still shows what landed.
  */
-export const worked = (i: Pick<Item, 'state' | 'branch' | 'landedPart'>) => i.state !== 'idea' && i.state !== 'proposal' && (!!i.branch || !!i.landedPart);
+export const worked = (i: Pick<Item, 'state' | 'branch' | 'projectFolder' | 'landedPart'>) => i.state !== 'idea' && i.state !== 'proposal' && (!!i.branch || !!i.projectFolder || !!i.landedPart);
 
 /** What decides a card's layout. */
-type Laid = Pick<Item, 'state' | 'branch' | 'prototypeEnd' | 'demo' | 'files' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes' | 'queue'> & Partial<Pick<Item, 'source' | 'id' | 'archivedAt'>>;
+type Laid = Pick<Item, 'state' | 'branch' | 'projectFolder' | 'prototypeEnd' | 'demo' | 'files' | 'pr' | 'landedPart' | 'finishing' | 'brief' | 'prototypes' | 'queue'> & Partial<Pick<Item, 'source' | 'id' | 'archivedAt'>>;
 
 /**
  * What a task an agent worked on shows beside its conversation: a demo, the files it named as the
@@ -569,7 +569,7 @@ export const split = (i: Laid) => i.state === 'idea' || i.state === 'proposal' |
  * they have just created (`beingWritten`) and has not started yet: its text alone, so the task goes
  * into the text, not into a note.
  */
-export const waitsFirstStart = (i: Pick<Item, 'state' | 'branch' | 'landedPart' | 'queue'> & Partial<Pick<Item, 'id' | 'archivedAt'>>) =>
+export const waitsFirstStart = (i: Pick<Item, 'state' | 'branch' | 'projectFolder' | 'landedPart' | 'queue'> & Partial<Pick<Item, 'id' | 'archivedAt'>>) =>
   holdsNotes(i) && !worked(i) && (!!i.queue || !(i.id && beingWritten.has(i.id)));
 
 /** The cards created on this page that have stayed open since: the owner is writing their task. */

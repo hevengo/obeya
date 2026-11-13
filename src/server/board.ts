@@ -1868,7 +1868,7 @@ export class Board {
       // a stopped task goes with its conversation, for the owner to come back to; work its workspace holds would be left unseen,
       // unless its repository does not run on the canvas, where nothing could show it anyway; one built on a
       // prototype that no agent has worked on since is planned, not stopped (`unstarted`)
-      if (row.state === 'planned' && row.branch && row.kind === 'task' && !row.prototype_of && !(row.built_on && !row.session_id)) {
+      if (row.state === 'planned' && (row.branch || row.work_place === 'project-folder') && row.kind === 'task' && !row.prototype_of && !(row.built_on && !row.session_id)) {
         if (row.queue) throw new BadRequest('notDone', 'the card waits to be started');
         if ((row.workspace || row.kept_in) && !this.item(id)?.repoDown) throw new BadRequest('holdsWork', 'its workspace holds work that has not landed');
         continue;
@@ -3906,6 +3906,7 @@ function work(r: CardRow, themeNow?: ThemeNow): Partial<Item> {
     ...(Object.keys(tags).length ? { tags } : {}),
     ...(r.from_id ? { from: r.from_id } : {}),
     ...(r.branch ? { branch: r.branch } : {}),
+    ...(r.work_place === 'project-folder' ? { projectFolder: true as const } : {}),
     // a workspace on another machine as ssh and scp write it
     ...(r.workspace ? { workspace: r.workspace.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),
     ...(r.kept_in ? { keptIn: r.kept_in.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),

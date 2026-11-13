@@ -266,6 +266,13 @@ pull requests still open), and the page shows the
 main branch and how work lands. `workspaces` is the exception: changing it restarts that repository's
 agents, as the dialog says at the field, the first of the repository's page (see Canvases).
 
+“Agents work in” offers worktrees, clones and the project folder with the same repository/machine
+layering and source label. The project-folder explanation says changes are live in that folder,
+without a task branch, listed and discardable; prototypes, pull request reviews and workstreams
+keep separate workspaces. It is not offered for a checkout registered as a clone. Named clones
+still take precedence. Changing this setting restarts the agents, but each started run keeps its
+resolved place; the new default applies to later starts (see Tasks in the project folder).
+
 #### `.obeya/settings.json`
 
 `.obeya/settings.json` (like `.vscode/settings.json`) is what a fresh clone brings: every value but

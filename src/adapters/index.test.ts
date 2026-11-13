@@ -146,6 +146,16 @@ describe('.obeya/settings.json', () => {
   });
 });
 
+test('project-folder validates and follows the existing settings layers and source labels', () => {
+  const parsed = parseShared('{"workspaces":"project-folder"}');
+  expect(parsed.problems).toEqual([]);
+  const info = repoInfo(gitRepo(join(dir, 'project-default')));
+  expect(repoValues(info, false, parsed.settings).workspaces).toEqual({ value: 'project-folder', source: 'repository' });
+  expect(withSettings(generic, () => parsed.settings).workspaces).toBe('project-folder');
+  expect(withSettings(generic, () => parsed.settings, true).workspaces).toBe('clones');
+  expect(parseShared('{"workspaces":"elsewhere"}').problems.length).toBeGreaterThan(0);
+});
+
 describe('readingAdapterModule', () => {
   const hasAdapterModule = (repo: string) => gitStepsSync(repo, readingAdapterModule(defaultBranchCommit(repo).commit));
   test('finds an adapter module from before on the default branch, not in the checkout', () => {

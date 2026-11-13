@@ -670,6 +670,7 @@ export class Workers {
   private forwards = new Map<string, { app: string; workspace: string; forward: Forward; port?: number }>();
   /** Cards whose stack is being stopped: a message to their worker waits until it is. */
   private stopping = new Map<string, Promise<void>>();
+  private trackingStops = new Map<string, Promise<void>>();
   /** Cards whose session on another machine was cut off, waiting for that machine to answer again. */
   private reconnecting = new Map<string, ReturnType<typeof setTimeout>>();
   /** When Obeya pauses at once a worker that the owner asked to pause at a safe point, by card. */
@@ -722,6 +723,10 @@ export class Workers {
     return this.o.workspaces.mode === 'folder' ? (this.o.workspaces as FolderWorkspaces) : null;
   }
 
+  private folderFor(cardId: string): FolderWorkspaces | null {
+    return this.folder ?? this.o.workspaces.folderFor?.(cardId) ?? null;
+  }
+
   /** Whether a video demo here may go to a page for colleagues, which the worker then writes. */
   private get shares(): boolean {
     return this.o.shares ? this.o.shares() : !!this.o.adapter.demo?.site;
@@ -753,9 +758,9 @@ export class Workers {
     const contribution = contributionOf(row);
     const pr = contribution ? JSON.stringify({ url: contribution.url, number: contribution.number, seen: [], reported: [] } satisfies PrState) : null;
     // a fresh session knows of no app that was stopped
-    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr, approved_at: null, parked: null, paused: null, pausing: null, snoozed: null, app: null });
+    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch: !this.folder && this.folderFor(card.id) ? null : branch, session_id: null, pr, approved_at: null, parked: null, paused: null, pausing: null, snoozed: null, app: null });
     const t = this.o.board.t.worker;
-    this.o.board.log(card.id, 'state', 'obeya', this.folder ? t.startedInFolder : contribution ? t.reviewStarted(contribution.number, contribution.author) : t.started(branch));
+    this.o.board.log(card.id, 'state', 'obeya', this.folderFor(card.id) ? t.startedInFolder : contribution ? t.reviewStarted(contribution.number, contribution.author) : t.started(branch));
     const launch = (headProblem?: string | null) => this.launch(card.id, this.briefing(card, branch, !!row.branch, headProblem), undefined, this.taskImages(card));
     return this.whenReady(
       card.id,
@@ -1156,11 +1161,11 @@ export class Workers {
       {},
       (path, worktree) =>
         [
-          this.folder
+          this.folderFor(card.id)
             ? `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. It is done, and your session had ended; it goes on in the folder ${path}, which other cards and the owner may have changed since.`
             : `The owner asks about this card${spoken ? ` (${SPOKEN})` : ''}. ${card.state === 'done' ? 'It was closed without a change to the repository' : `Its work is on main${commit ? ` (${commit.slice(0, 7)})` : ''}`}, and your session had ended; it goes on in a fresh workspace ${worktree ? 'at the head of' : 'on'} the branch ${row.branch}, where main may have moved on since.`,
           this.words(card.id, text, images.slice(stills.length), replyTo, place),
-          this.folder ? FOLLOW_UP_FOLDER : FOLLOW_UP,
+          this.folderFor(card.id) ? FOLLOW_UP_FOLDER : FOLLOW_UP,
           ...(worktree ? [IN_WORKTREE] : []),
         ].join('\n\n'),
       images,
@@ -1577,7 +1582,7 @@ export class Workers {
     // approved, a card its worker snoozed on its handover wakes no more: the check it was to make again is done with
     const unsnooze = () => card.snoozed && this.o.board.work(cardId, { snoozed: null });
     // in a folder without git, what it changed is in the folder already
-    if (this.folder) {
+    if (this.folderFor(cardId)) {
       unsnooze();
       return void this.close(cardId, 'owner', this.approvalComments(cardId));
     }
@@ -2101,9 +2106,9 @@ export class Workers {
    */
   async undo(cardId: string): Promise<UndoReport> {
     const card = this.card(cardId);
-    if (!this.folder) throw new BadRequest('notFolder', 'only the changes of a card in a folder without git are undone');
+    if (!this.folderFor(cardId)) throw new BadRequest('notFolder', 'only changes of a card working directly in its folder are undone');
     if (!handedOver(card) || this.landing.has(cardId)) throw new BadRequest('notReady', 'only a card waiting for approval has its changes discarded');
-    const report = await this.folder.undo(cardId);
+    const report = await this.folderFor(cardId)!.undo(cardId);
     const t = this.o.board.t.worker;
     const files = (list: string[]) => list.join(', ');
     this.o.board.log(
@@ -2122,7 +2127,7 @@ export class Workers {
       'The card still waits for the owner.',
     ];
     this.o.board.work(cardId, {
-      detail: JSON.stringify({ ...detail, noChange: !this.folder.changed(cardId).length || undefined }),
+      detail: JSON.stringify({ ...detail, noChange: !this.folderFor(cardId)!.changed(cardId).length || undefined }),
       unheard: JSON.stringify([...this.unheard(cardId), { said: [], text: told.filter(Boolean).join(' '), images: [] }] satisfies Unheard[]),
     });
     return report;
@@ -2265,9 +2270,9 @@ export class Workers {
     const page = this.pageNote(cardId);
     this.o.board.work(cardId, { state: 'done', need: null, detail: null, status_line: null, approved_at: null, pr: null, landed: JSON.stringify({ unchanged: true, ...(page.waits ? { page: true } : {}) } satisfies LandedState) });
     const t = this.o.board.t.worker;
-    const folder = !!this.folder?.changed(cardId).length;
+    const folder = !!this.folderFor(cardId)?.changed(cardId).length;
     // what it changed in the folder stays: nothing of it is undone any more
-    this.folder?.done(cardId);
+    this.folderFor(cardId)?.done(cardId);
     this.o.board.log(cardId, 'state', by, by === 'owner' ? (folder ? t.approvedFolder : t.approvedUnchanged) : t.doneUnchanged);
     // the worker that closed it is told by the tool's result, and its turn's end finishes it (unless it waits for its demo's page)
     if (by === 'owner')
@@ -2277,7 +2282,7 @@ export class Workers {
           folder ? 'The owner approved your work. Your changes stay in the folder as they are, and the card is done: they can no longer be undone from the card.' : 'The owner approved your work. It changed nothing in the repository, so nothing lands and there is no pull request: the card is done.',
           page.text,
           comments?.text ?? '',
-          this.folder ? AFTER_DONE : AFTER_LANDING,
+          this.folderFor(cardId) ? AFTER_DONE : AFTER_LANDING,
         ]
           .filter(Boolean)
           .join('\n\n'),
@@ -2400,7 +2405,8 @@ export class Workers {
     } else if (row.workspace) {
       const removeLanded = () => this.o.workspaces.removeLanded(cardId, row.branch ?? '');
       // the card is done either way; a leftover worktree does no harm
-      this.whileFreeing(cardId, row.workspace, reading ? reading.catch(() => {}).then(removeLanded) : removeLanded(), 'freeing a landed workspace');
+      const tracked = this.trackingStops.get(cardId);
+      this.whileFreeing(cardId, row.workspace, tracked ? Promise.all([tracked, reading?.catch(() => {})]).then(removeLanded) : reading ? reading.catch(() => {}).then(removeLanded) : removeLanded(), 'freeing a landed workspace');
     }
     const landed = landedOf(row);
     this.o.board.work(cardId, finishedRow(row));
@@ -2909,7 +2915,7 @@ export class Workers {
     if (card.finishing) {
       this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.stopped);
       this.finish(cardId);
-      return Promise.resolve();
+      return this.trackingStops.get(cardId) ?? Promise.resolve();
     }
     if (card.state !== 'working' && card.state !== 'waiting') throw new BadRequest('noAgent', 'no agent works on this card');
     return this.planAgain(cardId, () => this.o.board.log(cardId, 'state', 'owner', card.pr ? this.o.board.t.worker.stoppedPrOpen(card.pr.number) : this.o.board.t.worker.stopped));
@@ -2933,7 +2939,7 @@ export class Workers {
   freeStoppedWorkspace(cardId: string, refresh = false): Promise<void> {
     const generation = this.generation.get(cardId);
     const path = this.o.board.row(cardId).workspace;
-    return this.o.workspaces.hasWork(cardId, refresh).then((keep) => {
+    return Promise.resolve(this.trackingStops.get(cardId)).then(() => this.o.workspaces.hasWork(cardId, refresh)).then((keep) => {
       const card = this.o.board.item(cardId);
       if (keep || !card || !stopped(card) || card.queue || this.generation.get(cardId) !== generation || this.o.board.row(cardId).workspace !== path) return;
       this.o.workspaces.release(cardId);
@@ -2947,7 +2953,7 @@ export class Workers {
    * landed, nor a prototype's.
    */
   evictable(cardId: string): boolean {
-    if (this.o.workspaces.mode !== 'clones' || this.evicting.has(cardId)) return false;
+    if (this.folderFor(cardId) || this.o.workspaces.mode !== 'clones' || this.evicting.has(cardId)) return false;
     // from the row: the pools the board's snapshot shows ask for each card
     let row: CardRow;
     try {
@@ -3427,7 +3433,7 @@ export class Workers {
     const path = row.workspace;
     if (!path) return;
     this.kept.delete(path);
-    const retaken = row.branch ? this.o.workspaces.retake(cardId, path, row.branch) : null;
+    const retaken = (row.branch || this.folderFor(cardId)) ? this.o.workspaces.retake(cardId, path, row.branch ?? '') : null;
     if (!retaken) {
       // another card works in that clone now: the card's branch stays there, for its next start to take from it
       const taken = this.o.workspaces.mode === 'clones' && this.o.workspaces.list().some((w) => w.path === path && w.card_id);
@@ -3560,6 +3566,7 @@ export class Workers {
       this.pushingMain.delete(id);
     }
     for (const id of [...this.forwards.keys()]) this.unforward(id);
+    return Promise.allSettled([...this.trackingStops.values()]).then(() => {});
   }
 
   // ---------------------------------------------------------------- sessions
@@ -3571,6 +3578,12 @@ export class Workers {
   }
 
   private launch(cardId: string, message: string, resume?: string, images: string[] = []) {
+    const settling = this.trackingStops.get(cardId);
+    if (settling) {
+      const path = this.o.board.row(cardId).workspace;
+      if (path) void this.whenReady(cardId, settling.then(() => path), () => this.launch(cardId, message, resume, images), () => {});
+      return;
+    }
     const row = this.o.board.row(cardId);
     if (!row.workspace) throw new Error(`card ${cardId} has no workspace to work in`);
     const preferences = this.o.preferences?.() ?? '';
@@ -3606,7 +3619,7 @@ export class Workers {
       contextUpdate: () =>
         [this.restartStillDue(cardId, live), this.pauseStillDue(live), this.pageNewsNow(cardId, live), this.unheardNow(cardId, live), this.preferencesUpdate(live), this.decisionsUpdate(cardId, live)].filter(Boolean).join('\n\n') || undefined,
       askOwner: (request, signal) => this.askOwner(cardId, live, request, signal),
-      ...(this.folder ? { watch: this.folder.watch(cardId) } : {}),
+      ...(this.folderFor(cardId) ? { watch: this.folderFor(cardId)!.watch(cardId) } : {}),
       ...(resume ? { resume } : {}),
       ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
       onEvent: (e) => this.onEvent(cardId, live, e),
@@ -3891,6 +3904,19 @@ export class Workers {
     clearTimeout(live?.waiting);
     clearTimeout(live?.lifts);
     live?.session.close();
+    const folder = this.folderFor(cardId);
+    if (folder && live) {
+      const settled = live.session.done.catch(() => {}).then(() => folder.stop(cardId)).catch((error) => {
+        console.error(`settling stopped card ${cardId}:`, error);
+        throw error;
+      }).finally(() => {
+        if (this.trackingStops.get(cardId) === settled) this.trackingStops.delete(cardId);
+        if (!this.shut) this.o.board.changed();
+      });
+      this.trackingStops.set(cardId, settled);
+      // Non-waiting end paths still observe a failure; callers that release the folder await it.
+      void settled.catch(() => {});
+    }
     // its slot is free again
     if (live?.busy) this.o.board.changed();
   }
@@ -4019,7 +4045,7 @@ export class Workers {
    */
   private turnEnded(cardId: string, live: Live, background: number, waited = false, more = false) {
     // calls whose end its hooks never heard of (refused, cut off) end with the turn
-    void this.folder?.settle(cardId);
+    void this.folderFor(cardId)?.settle(cardId);
     const handedOver = live.handedOver;
     const acted = live.acted || waited;
     // what runs now was started before any later turn
@@ -4239,7 +4265,7 @@ export class Workers {
   private backgroundChanged(cardId: string, live: Live, running: { id: string; description: string }[]) {
     live.background = running.length;
     // what it changes in a folder without git meanwhile is the card's
-    this.folder?.background(cardId, running.length > 0);
+    this.folderFor(cardId)?.background(cardId, running.length > 0);
     const now = Date.now();
     live.tasks = new Map(running.map((t) => [t.id, { ...live.tasks.get(t.id), description: t.description, since: live.tasks.get(t.id)?.since ?? now }]));
     // the card shows what runs while the worker is in a turn
@@ -4264,7 +4290,7 @@ export class Workers {
 
   /** A card that waits for the owner has its app stopped once a quick reply has not come (`app.stop`). */
   private parkLater(cardId: string) {
-    if (!this.o.adapter.app?.stop || !this.waitsForOwner(cardId)) return;
+    if ((!this.folder && this.folderFor(cardId)) || !this.o.adapter.app?.stop || !this.waitsForOwner(cardId)) return;
     clearTimeout(this.parking.get(cardId));
     this.parking.set(
       cardId,
@@ -4411,6 +4437,7 @@ export class Workers {
 
   /** Stops the app in the card's workspace, unless it holds what must stay (`app.keep`). */
   private async park(cardId: string) {
+    if (!this.folder && this.folderFor(cardId)) return;
     const { stop, keep } = this.o.adapter.app ?? {};
     // the settings lost the command since the grace began
     if (!stop) return;
@@ -4800,7 +4827,7 @@ export class Workers {
       },
       {
         name: 'ready_for_review',
-        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what your last handover and your replies since have not said yet, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary, as does a follow-up to your task that is due only later (start_at). The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in the language of its narration); without a new one, the demo already on the card stands. Then end your turn.`,
+        description: `Hand the finished work to the owner, after ${this.folderFor(cardId) ? 'finishing the changes' : 'committing it'}, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what your last handover and your replies since have not said yet, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary, as does a follow-up to your task that is due only later (start_at). The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in the language of its narration); without a new one, the demo already on the card stands. Then end your turn.`,
         schema: {
           summary: z.string(),
           demo: z
@@ -4880,7 +4907,7 @@ export class Workers {
             .max(MAX_RESULT_FILES)
             .optional()
             .describe(
-              `the files your card made or changed ${this.folder ? 'in the folder' : 'on your branch'} that are the result for the owner (a document, a report, a spreadsheet, a page; not the code or configuration behind it), each with its path and a one-line caption in ${language}. The card shows them beside the demo: Markdown formatted, a PDF in the browser's viewer, any other file to open on the owner's computer. Without them, the ones named at your last handover stand.`,
+              `the files your card made or changed ${this.folderFor(cardId) ? 'in the folder' : 'on your branch'} that are the result for the owner (a document, a report, a spreadsheet, a page; not the code or configuration behind it), each with its path and a one-line caption in ${language}. The card shows them beside the demo: Markdown formatted, a PDF in the browser's viewer, any other file to open on the owner's computer. Without them, the ones named at your last handover stand.`,
             ),
         },
         run: ({ summary, demo, code_video, files, review: results, pr_draft: draft }) => {
@@ -5016,7 +5043,7 @@ export class Workers {
               // over without a demo shows what it changed, while there are files of it to show
               ...(named?.length
                 ? { files: JSON.stringify(named) }
-                : this.folder && !d && !kept && (named || !row.files || row.files === '[]')
+                : this.folderFor(cardId) && !d && !kept && (named || !row.files || row.files === '[]')
                   ? { files: shows ? '[]' : null }
                   : named
                     ? { files: null }
@@ -5040,7 +5067,7 @@ export class Workers {
                   );
             // what the owner's button does, as Obeya sees the branch: the worker may know of no commit on it but its own
             const lands =
-              review || this.folder
+              review || this.folderFor(cardId)
                 ? ''
                 : !work
                   ? ' Obeya sees no change on your branch: approving closes the card, and nothing lands.'
@@ -5063,7 +5090,7 @@ export class Workers {
                   : handOverWork({ ...given, dir: here.dir }, named, false),
               );
             // in a folder, what the change has to show decides whether a handover without a demo shows it beside the conversation
-            if (this.folder && !given) return this.showsFiles(cardId).then((shows) => handOverWork(given, named, shows));
+            if (this.folderFor(cardId) && !given) return this.showsFiles(cardId).then((shows) => handOverWork(given, named, shows));
             return handOverWork(given, named, false);
           };
           // the files named as the result, checked against what the card changed before anything is handed over
@@ -5343,11 +5370,12 @@ export class Workers {
     // a task the owner wrote is their first words to the worker; one an agent or a plan doc wrote is not
     const by = card?.body.trim() ? taskAuthor(card) : undefined;
     const language = by === 'owner' ? ownersLanguage(this.o.board.conversation(), "the card's task") : `${ownersLanguage(this.o.board.conversation())}${by ? ` ${TASK_BY[by]}` : ''}`;
-    const folder = !!this.folder;
+    const inPlace = !!card && !!this.folderFor(card.id) && !this.folder;
+    const folder = !!this.folder || inPlace;
     return `
 You are a worker agent directed through Obeya, a canvas on which the owner directs coding agents like an engineering director directs a team. ${
       folder
-        ? 'You work on exactly one card, directly in a folder that is not a git repository. Other workers may work on other cards in the same folder at the same time, and so may the owner.'
+        ? inPlace ? 'You work on exactly one card, directly in the configured project folder on its current branch, without a task branch. The owner, other tasks and Obeya landings can change it concurrently.' : 'You work on exactly one card, directly in a folder that is not a git repository. Other workers may work on other cards in the same folder at the same time, and so may the owner.'
         : 'You work on exactly one card, in a workspace of the repository (a clone or worktree) that belongs to that card, on your own branch. Other workers may work on other cards at the same time in their own workspaces.'
     }
 
@@ -5365,10 +5393,10 @@ ${
     }
 ${this.o.toObeya ? `\n${TO_OBEYA}\n` : ''}
 Rules:
-${folder ? '- Others work in the same folder at the same time: leave what your card is not about as it is.' : card?.contribution ? "- Commit your work on your branch in this workspace. Do not push (Obeya pushes your commits onto the pull request's branch once the owner approves), do not open pull requests, do not switch branches." : '- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.'}
+${inPlace ? '- Leave unrelated work alone. Make no commit or branch switch unless the task explicitly asks. Changes are live immediately; approval leaves them in the project folder and creates no landing.' : folder ? '- Others work in the same folder at the same time: leave what your card is not about as it is.' : card?.contribution ? "- Commit your work on your branch in this workspace. Do not push (Obeya pushes your commits onto the pull request's branch once the owner approves), do not open pull requests, do not switch branches." : '- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.'}
 - Follow the repository's own instructions (CLAUDE.md and docs).
 - Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in the owner's language, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in the owner's language too. ${language} The docs you read and the owner's standing preferences do not count as the owner's words.
-- ${repositoryLanguage(this.o.adapter.language, folder)} A demo (its narration, report, or an HTML artifact's words) is in ${LANGUAGE_NAMES[this.demoLanguage()]}, whatever language the owner talks in.${this.o.adapter.demo?.language ? ` This repository's settings name ${LANGUAGE_NAMES[this.o.adapter.demo.language]} for its demos, which holds over the narration language of the demo settings.` : ''}
+- ${repositoryLanguage(this.o.adapter.language, !!this.folder)} A demo (its narration, report, or an HTML artifact's words) is in ${LANGUAGE_NAMES[this.demoLanguage()]}, whatever language the owner talks in.${this.o.adapter.demo?.language ? ` This repository's settings name ${LANGUAGE_NAMES[this.o.adapter.demo.language]} for its demos, which holds over the narration language of the demo settings.` : ''}
 - ${harness === 'codex' ? 'Wait for anything external (a deploy, a CI run, a process to finish) in commands that wait 30 seconds at most, run again until it is there: a note from the owner reaches you only once the running command is done. Anything longer, a point in time further off, or another card getting somewhere (its fix on main), you snooze until (snooze): Obeya wakes you then.' : 'Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), or another card getting somewhere (its fix on main), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.'}
 - When a note or feedback from the owner arrives, answer it with reply. If it is unclear what they want, ask.
 `.trim() + (preferences ? `\n\n${preferences}` : '');
@@ -5453,21 +5481,23 @@ ${idea.idea.brief}` : '',
       );
     }
     if (this.folder) return this.folderBriefing(card.id, parts, resumed);
-    parts.push(
+    const inPlace = !!this.folderFor(card.id);
+    if (inPlace) parts.push(`You work in the project folder ${this.o.board.row(card.id).workspace}, on its current branch as it stands. Existing dirty and untracked files belong to their owners; leave unrelated work alone. Make no commit or branch switch unless this task explicitly asks. Obeya lists your changes and can discard them before approval. Git-ignored files are tracked only when you edit them directly, not when scripts change them. Owner or IDE writes during your commands can appear in your list too. Use the app already running here; Obeya skips setup and never stops or parks this app.`);
+    else parts.push(
       card.builtOn
         ? `You are on branch ${branch}, which holds the prototype's commits (and any earlier work on this card): look at its log and diff first.`
         : resumed
           ? `You are on branch ${branch}, which already holds earlier work on this card, perhaps uncommitted: look at its log, \`git status\` and diff first and go on from there.`
           : `You are on branch ${branch}, fresh from the default branch.`,
     );
-    if (this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the clone.`);
+    if (!inPlace && this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the clone.`);
     const made = this.o.board.row(card.id).new_repo;
     if (made && (JSON.parse(made) as StoredNewRepo).made)
       parts.push(
         `This repository is new: Obeya created it for this card with a first commit of what its folder held (a default .gitignore, else nothing). It is local only, with no remote. Besides the task, set it up as part of your work: a CLAUDE.md with what the task says about how to work in this repository, and its Obeya settings (\`.obeya/settings.json\`) with the skill \`obeya:settings\`, as the card “${this.o.board.t.adapterSetup.title(basename(this.o.repoPath ?? ''))}” would.`,
       );
     const { run, stop } = this.o.adapter.app ?? {};
-    const parking = stop ? ' While the card waits for the owner, Obeya stops the app in your workspace; your next message then says so.' : '';
+    const parking = !inPlace && stop ? ' While the card waits for the owner, Obeya stops the app in your workspace; your next message then says so.' : '';
     const far = hostName(this.o.board.row(card.id).workspace) ? " (this workspace is on another machine: Obeya forwards that address's port, and only that one, to the owner's)" : '';
     const tryIt = ` Once it runs and opens in a browser, give its address with app_running, so the owner can try it by hand from the card${far}.`;
     if (run?.trim()) parts.push(`How to run the app: ${run.trim()}${parking}${tryIt}`);
@@ -5545,7 +5575,7 @@ ${idea.idea.brief}` : '',
 
   /** The end of the briefing in a folder without git: where the card works, and how it hands over without a branch. */
   private folderBriefing(cardId: string, parts: string[], resumed: boolean): string {
-    const changed = this.folder!.changed(cardId).length;
+    const changed = this.folderFor(cardId)!.changed(cardId).length;
     parts.push(
       `You work directly in the folder ${this.o.board.row(cardId).workspace}, which is not a git repository: what you change there is there at once, for everyone.${resumed && changed ? ` Your card changed ${changed === 1 ? 'one file' : `${changed} files`} there before; the card lists them.` : ''}`,
     );

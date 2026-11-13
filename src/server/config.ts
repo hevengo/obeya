@@ -626,10 +626,11 @@ export class Config {
           name,
           repos: given.map(({ config: r, ref, adapter, read: got, values }) => {
             const trust = trustOf(got.info.path, got.shared, r.settings, this.o.store);
-            const leaving = got.info.folder ? [] : this.leaving(id, ref.id === repos[0]!.ref.id ? null : ref.id, r, adapter.workspaces);
+            const leaving = got.info.folder ? [] : this.leaving(id, ref.id === repos[0]!.ref.id ? null : ref.id, r, adapter.workspaces === 'project-folder' ? 'worktrees' : adapter.workspaces);
             return {
             id: ref.id,
             workspaces: adapter.workspaces,
+            ...(this.o.store.hasWorkspace(got.info.path) ? { projectFolderUnavailable: true as const } : {}),
             ...(got.info.folder ? { folder: true as const } : {}),
             ...(got.adapterModule ? { adapterGone: true } : {}),
             values: (() => {

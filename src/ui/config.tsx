@@ -1844,12 +1844,12 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
     return next;
   };
   // "Agents work in": this machine's setting where the repository's says otherwise; worktrees put the clones named aside
-  const setWorkIn = (mode: 'clones' | 'worktrees') => {
+  const setWorkIn = (mode: 'clones' | 'worktrees' | 'project-folder') => {
     if (mode === workIn) return;
     const { workspaces: _, ...others } = repo.settings ?? {};
     const settings = known === mode ? others : { ...others, workspaces: mode };
     let next = without('settings', Object.keys(settings).length ? settings : undefined);
-    if (mode === 'worktrees') {
+    if (mode !== 'clones') {
       parked.current = { ...(repo.clones !== undefined ? { clones: repo.clones } : {}), ...(repo.workspaces ? { workspaces: repo.workspaces } : {}), ...(repo.hosts ? { hosts: repo.hosts } : {}) };
       next = without('hosts', undefined, without('workspaces', undefined, without('clones', undefined, next)));
     } else next = { ...next, ...parked.current };
@@ -1903,7 +1903,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
             </div>
             <div className="cfg-control">
               <div className="seg" role="radiogroup" aria-label={t.config.settings.workspaces}>
-                {(['worktrees', 'clones'] as const).map((x) => (
+                {(['worktrees', 'clones', 'project-folder'] as const).filter((x) => x !== 'project-folder' || !resolved?.projectFolderUnavailable).map((x) => (
                   <button key={x} type="button" role="radio" aria-checked={workIn === x} className={workIn === x ? 'on' : undefined} onClick={() => setWorkIn(x)}>
                     {t.config.settings.workIn[x]}
                   </button>

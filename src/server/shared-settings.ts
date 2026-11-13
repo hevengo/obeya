@@ -1,3 +1,4 @@
+import { ownGitWrite } from './own-writes';
 // "Take over into the repository for everyone": a repository's settings for this machine go into its
 // `.obeya/settings.json`, which a fresh clone brings with it. Where work lands on the main branch
 // they are committed there; where it goes through pull requests, the commit goes out as one, or,
@@ -96,7 +97,7 @@ export async function commitShared(repoPath: string, mine: SharedSettings): Prom
   const commit = await commitBeside(repoPath, parent, text, subjectOf(mine));
   await must(repoPath, ['update-ref', '-m', 'obeya: settings for everyone', `refs/heads/${branch}`, commit, parent]);
   // the checkout on the branch gets the file as committed, in its index and among its files
-  if (onIt) await must(repoPath, ['checkout', commit, '--', REPO_SETTINGS_FILE]);
+  if (onIt) await ownGitWrite(repoPath, () => must(repoPath, ['checkout', commit, '--', REPO_SETTINGS_FILE]), ['checkout', commit, '--', REPO_SETTINGS_FILE]);
   return { committed: commit, branch, ...(before ? { before } : {}), after };
 }
 

@@ -49,6 +49,8 @@ export interface CardRow {
   agent: string | null;
   /** Leased clone and branch while a worker has the card. */
   workspace: string | null;
+  /** Resolved on first start; unaffected by later repository defaults. */
+  work_place: 'workspace' | 'project-folder' | null;
   branch: string | null;
   /** The worker's latest `report`. */
   status_line: string | null;
@@ -639,6 +641,7 @@ export const MIGRATIONS = [
     INSERT INTO archive_changes (canvas_id, card_id) SELECT OLD.canvas_id, value FROM json_each(json_array(OLD.id, OLD.parent_id, OLD.prototype_of)) WHERE value IS NOT NULL;
   END;`,
   'ALTER TABLE cards ADD COLUMN code_video TEXT; ALTER TABLE cards ADD COLUMN code_videos TEXT;',
+  'ALTER TABLE cards ADD COLUMN work_place TEXT;',
 ];
 
 const EVENT_COLUMNS = 'id, card_id AS cardId, at, kind, author, text, code, images, mocks, reply_to AS replyTo, spot, answer, picks, unread, read_after AS readAfter, wish, reply, forwarded, token';
@@ -1694,6 +1697,11 @@ export class Store {
   folderCard(cardId: string): string | null {
     const row = this.db.query('SELECT state FROM folder_cards WHERE card_id = $c').get({ c: cardId }) as { state: string } | null;
     return row?.state ?? null;
+  }
+
+  /** Cards with a change record in this shared folder, including stopped and finished cards. */
+  folderCardIds(folder: string): string[] {
+    return (this.db.query('SELECT card_id FROM folder_cards WHERE folder = $folder').all({ folder }) as { card_id: string }[]).map((r) => r.card_id);
   }
 
   /** Keeps the card's record in the folder; null removes it. */

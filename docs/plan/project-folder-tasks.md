@@ -2,7 +2,7 @@
 
 > Plan from “Assess running cards directly in the main repository”, recorded on 2026-11-13.
 > The owner chose work directly in the configured checkout, with a repository default and a
-> per-task override. This document plans that feature; it implements none of it. Each workstream
+> per-task override. W1 ships the repository default; per-task selection and conflict scheduling remain below. Each workstream
 > is a complete, separately landable step. Delete this plan when the last workstream ships,
 > keeping the resulting behaviour and decisions in the design chapters and settings reference.
 
@@ -16,26 +16,23 @@ can be discarded without a branch or a landing.
 
 ## Where it stands
 
-- `workspaces` in the repository's settings currently chooses worktrees or clones, layered with
-  this machine's configuration. Both give each card a workspace of its own. Changing it restarts
-  that repository's agents; there is no per-task choice of place.
-- The checkout where work lands on local main is excluded from the clone pool. It is also the
-  read tree for plan docs and the Coordinator, project and exploration agents. The decision of
-  2026-10-30 keeps a card's branch out of that checkout.
-- Folders without git already run any number of cards in one folder, with change lists, diffs,
-  undo and approval to done. Selection of this behaviour is currently per repository; the new
-  mode needs it per card without treating a git repository as a folder without git.
-- Start buttons already share a menu for an individual card's agent, model and effort. The choice
-  persists while planned or queued and is fixed during a run. Extend that shared interaction.
-- Waiting cards' apps are parked after five minutes using `app.stop` in their workspace.
-  A landing that would overwrite local changes already stops and goes to the owner.
+- `workspaces` chooses worktrees, clones or the project folder, layered with this machine's
+  configuration. A run keeps its resolved place across restarts and default changes. The shared
+  start-button menu still chooses only the agent, model and effort; per-task place is W2.
+- Ordinary tasks can use the configured checkout as it stands. Prototypes, pull request reviews,
+  workstreams and builds on a prototype retain isolated workspaces. Checkout runs have no task
+  branch or landing, skip setup, keep normal checks and never park or stop the existing app.
+- Folder tracking is reused per card in git repositories: tracked and non-ignored untracked
+  files, plus direct edits of ignored files. Obeya's own writes are excluded. Changes, text diffs
+  and safeguarded discard use the existing change-list view; W2 finishes its presentation.
+- The existing landing guard still refuses to overwrite local changes. Scheduling around
+  checkout changes and attributing blocked landings to their tasks is W3.
 
-Useful starting points, to recheck against the code when each workstream starts: the per-card
-workspace contract and allocation in `src/server/workspaces.ts`, folder tracking and undo in
+Useful starting points: the per-card workspace contract and allocation in
+`src/server/workspaces.ts` and `src/server/project-workspaces.ts`, tracking and undo in
 `src/server/folder.ts`, worker lifecycle in `src/server/workers.ts`, plan parsing in
 `src/core/plan-doc.ts`, settings in `src/server/settings.ts` and `src/adapters/`, and the shared
-start menu and change-list views under `src/ui/`. This is a feature project, not a prerequisite
-cleanup of those modules.
+start menu and change-list views under `src/ui/`.
 
 ## Agreed behaviour
 
@@ -107,7 +104,7 @@ left the affected files. Retain the existing protection for local changes with n
 
 ## Workstreams
 
-- [ ] **W1:** Run a repository's tasks in the project folder. Add the third `workspaces` choice,
+- [x] **W1:** Run a repository's tasks in the project folder. Add the third `workspaces` choice,
   its layering, validation, source label and explanation in Configuration. Persist each run's
   resolved place and apply the eligibility rules, so ordinary tasks use the configured checkout
   while prototypes, pull request reviews and workstreams still get their own workspace. Adapt
@@ -160,7 +157,13 @@ Land W1, then W2, then W3. W1 deliberately delivers a repository-wide trial befo
 selection and the richer scheduler; its existing landing refusal must still protect local work.
 The reliability and cost of attribution in a live project folder are the main risk: if W1 cannot
 keep Obeya's own writes out or present honest undo coverage, settle that before enabling the new
-choice. No performance result has yet been measured for a live project folder.
+choice. W1 measured the live Obeya worktree with its scratch server running, installed dependencies and
+compiled output present: 584 git-visible files totalling 11.65 MB, with 8,178 dependency/build
+files (about 508 MiB) excluded. Five runs took 7.88–9.62 ms for the metadata manifest and
+42.30–48.26 ms for full undo preparation. The manifest enumerates git-visible paths and stats
+those files and their parents; the snapshot clones only those visible files. Direct edits inspect
+their named file, including ignored files. `scripts/measure-project-folder.ts` repeats the actual
+manifest and snapshot paths in a live checkout, with snapshots outside it.
 
 Each workstream runs `bun run test` and `bun run typecheck`, uses isolated scratch repositories
 and a scratch Obeya (never the owner's checkout or live instance), and hands over its observable

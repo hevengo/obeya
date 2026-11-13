@@ -79,7 +79,7 @@ export async function setup(adapter: RepoAdapter = defaultAdapter, withOrigin = 
   const clones = adapter.workspaces === 'clones';
   const workspaces = clones
     ? await primedClones(store, main, dir, { source: withOrigin ? origin : main })
-    : new Workspaces(store, 'c', { mode: adapter.workspaces, repoPath: main, dir: join(dir, 'ws') });
+    : new Workspaces(store, 'c', { mode: adapter.workspaces === 'project-folder' ? 'worktrees' : adapter.workspaces, repoPath: main, dir: join(dir, 'ws') });
   spaces = workspaces;
   if (clones) for (const w of workspaces.list()) identify(w.path);
   runtime = new FakeRuntime();
