@@ -15,7 +15,7 @@ import { t } from './strings';
 const DISCARD_WAIT_S = 8;
 
 /** Which undo the card has, with what it means on hover. */
-function UndoKind({ undo }: { undo: 'full' | 'partial' }) {
+function UndoKind({ undo }: { undo: 'full' | 'partial' | 'none' }) {
   return (
     <span className={`f-undo ${undo}`} title={t.folder.undoHint[undo]}>
       {t.folder.undo[undo]}
@@ -92,7 +92,7 @@ export function FolderBox({ item, diff }: { item: Item; diff: CardDiff | null })
  */
 export function DiscardChanges({ diff, act, onDone }: { diff: CardDiff | null; act: (a: CardAction, done: ActDone) => Promise<void>; onDone: () => void }) {
   const [left, setLeft] = useState<number | null>(null);
-  const undoable = (diff?.folder?.changes ?? []).filter((c) => c.undo === 'yes').length;
+  const undoable = shownChanges(diff?.folder?.changes ?? []).filter((c) => c.undo === 'yes').length;
   useEffect(() => {
     if (left === null) return;
     if (left === 0) {

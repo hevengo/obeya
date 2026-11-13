@@ -101,6 +101,7 @@ export interface ChangeRow {
   changed?: true;
   gone?: true;
   undo?: FolderChange['undo'];
+  ignored?: true;
   /** In a folder: changed while the card's calls wrote nothing, so maybe by another program; no change of the card's. */
   uncertain?: true;
 }
@@ -113,7 +114,7 @@ export interface ChangeRow {
  */
 export function changeRows(diff: CardDiff | null, named: CardFile[] = []): ChangeRow[] {
   const all: ChangeRow[] = diff?.folder
-    ? shownChanges(diff.folder.changes).map(({ kind, path, from, dir, added, removed, changed, gone, undo }) => ({ kind, path, from, dir, added, removed, changed, gone, undo }))
+    ? shownChanges(diff.folder.changes).map(({ kind, path, from, dir, added, removed, changed, gone, undo, ignored }) => ({ kind, path, from, dir, added, removed, changed, gone, undo, ignored }))
     : (diff?.files ?? []).map((f) => ({
         kind: f.status === 'renamed' ? 'moved' : f.status,
         path: f.file,

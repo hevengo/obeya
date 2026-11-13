@@ -12,8 +12,15 @@ export function projectWorkspaces(store: Store, isolated: Workspaces, folder: Fo
     if (!places.has(id)) places.set(id, store.card(id)?.work_place === 'project-folder');
     return places.get(id)!;
   };
+  const resolvePlace = (id: string) => {
+    const row = store.card(id);
+    const eligible = row && eligibleLocation && row.kind === 'task' && !row.parent_id && !row.prototype_of && !row.contribution && !row.built_on && !row.adopted && !row.upstream && (!row.new_repo || JSON.parse(row.new_repo).none === true) && !row.becomes_project;
+    return row?.work_place ?? (eligible && !row?.branch && !row?.workspace && (row?.work_in ? row.work_in === 'project-folder' : defaultInPlace) ? 'project-folder' : 'workspace');
+  };
   return new Proxy(isolated, {
     get(target, property) {
+      if (property === 'leasable') return (overSlots = false, near: string | null = null, id?: string) =>
+        id && resolvePlace(id) === 'project-folder' ? overSlots || isolated.hasLocalSlot() : isolated.leasable(overSlots, near);
       if (property === 'folderFor') return (id: string) => inPlace(id) ? folder : null;
       const value = Reflect.get(target, property, target);
       if (typeof value !== 'function') return value;
@@ -21,8 +28,7 @@ export function projectWorkspaces(store: Store, isolated: Workspaces, folder: Fo
       return (id: string, ...args: unknown[]) => {
         if (property === 'lease') {
           const row = store.card(id);
-          const eligible = row && eligibleLocation && row.kind === 'task' && !row.parent_id && !row.prototype_of && !row.contribution && !row.built_on && !row.adopted && !row.upstream;
-          const place = row?.work_place ?? (defaultInPlace && eligible && !row?.branch && !row?.workspace ? 'project-folder' : 'workspace');
+          const place = resolvePlace(id);
           const options = args[1] as { overSlots?: boolean } | undefined;
           if (place === 'project-folder' && !options?.overSlots && !isolated.hasLocalSlot()) throw new WorkspaceError('All slots are taken.', 'noSlot');
           const lease = place === 'project-folder' ? folder.lease(id) : isolated.lease(id, args[0] as string, options);

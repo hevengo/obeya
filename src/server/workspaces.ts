@@ -568,7 +568,7 @@ export interface CardWorkspaces {
   list(): { path: string; card_id: string | null }[];
   leasedBy(cardId: string): string | null;
   lease(cardId: string, branch: string, o?: LeaseOptions): Lease;
-  leasable(overSlots?: boolean, near?: string | null): boolean;
+  leasable(overSlots?: boolean, near?: string | null, cardId?: string): boolean;
   pool(busy: string[]): PoolHost[];
   keepLeftovers(path: string, host?: string): Promise<string | null>;
   hasWork(cardId: string, refresh?: boolean): Promise<boolean>;

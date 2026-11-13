@@ -216,6 +216,10 @@ export interface Item {
   workspace?: string;
   /** This run works in the configured git checkout. */
   projectFolder?: true;
+  /** Place resolved for a started run, including one stopped without changes. */
+  workPlace?: WorkIn;
+  /** Explicit place for the next run; absent follows the repository until start. */
+  workIn?: WorkIn;
   /** The clone that keeps its branch since its workspace was taken from it, until it works again (the same form as `workspace`). */
   keptIn?: string;
   /** Files the Coordinator expects the card to change. */
@@ -941,7 +945,12 @@ export interface CanvasInfo {
   agents?: { running: number; paused: number };
 }
 
+/** A per-card departure from the repository default, resolved only when work starts. */
+export type WorkIn = 'workspace' | 'project-folder';
+
 export interface RepoRef {
+  /** The configured checkout can take a local task, rather than being a leased clone. */
+  workInAvailable?: true;
   /** Ordinary new tasks default to the configured checkout. */
   projectFolder?: true;
   id: string;
@@ -1488,6 +1497,7 @@ export type CardAction =
    * workers' group's; `null`: the group's again. Only while the card waits to start (planned, or proposed).
    */
   | { action: 'agent'; agent: CardAgent | null }
+  | { action: 'workIn'; workIn: WorkIn | null }
   /**
    * The Workspaces list: the card's clone goes to the cards waiting for one, after the undo window
    * (`UNDO_HOLD_MS`); its worker stops, its uncommitted work is kept on its branch, and it goes on
@@ -1655,6 +1665,8 @@ export type ErrorCode =
   | 'notProposal'
   /** Choosing a card's harness and model once it is at work (or done): its agent keeps its own. */
   | 'agentStarted'
+  | 'workInStarted'
+  | 'workInUnavailable'
   | 'notSuperseded'
   | 'revising'
   | 'planCard'

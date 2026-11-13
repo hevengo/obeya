@@ -333,9 +333,10 @@ export const changePath = (c: { path: string; from?: string; dir?: true }) => {
 export const hasLines = (c: { added?: number; removed?: number }) => c.added !== undefined && (c.added > 0 || c.removed! > 0);
 
 /** What else the folder's change list says of a file: that the card also changed one it moved, and what discarding would leave. */
-export function ChangeNote({ c }: { c: Pick<FolderChange, 'changed' | 'undo'> }) {
+export function ChangeNote({ c }: { c: Pick<FolderChange, 'changed' | 'undo' | 'ignored'> }) {
   return (
     <>
+      {c.ignored && <span className="hint" title={t.folder.ignoredHint}> · {t.folder.ignored}</span>}
       {c.changed && <span className="hint"> {t.folder.alsoChanged}</span>}
       {c.undo && c.undo !== 'yes' && (
         <span className="f-left" title={c.undo === 'lost' ? t.folder.lostHint : c.undo === 'shared' ? t.folder.sharedHint : t.folder.changedSinceHint}>

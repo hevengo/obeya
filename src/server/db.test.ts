@@ -275,10 +275,11 @@ test('adding code videos preserves a legacy handover and stores each history ind
     const [card] = s.insert([{ canvas_id: 'c', kind: 'task', x: 0, y: 0 }]);
     const legacy = JSON.stringify({ dir: '/demo', kind: 'video', chapters: [], handover: 1 });
     s.update(card!.id, { demo: legacy });
+    s.db.run('ALTER TABLE cards DROP COLUMN work_in');
     s.db.run('ALTER TABLE cards DROP COLUMN work_place');
     s.db.run('ALTER TABLE cards DROP COLUMN code_video');
     s.db.run('ALTER TABLE cards DROP COLUMN code_videos');
-    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 2}`);
+    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 3}`);
     s.db.close();
     const current = new Store(path);
     expect(current.card(card!.id)).toMatchObject({ demo: legacy, code_video: null, code_videos: null });

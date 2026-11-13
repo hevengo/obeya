@@ -156,6 +156,19 @@ instructions that differ by harness (how a worker waits); what it leaves out is 
 changes only while the card waits to start (planned, proposed, in the queue); once it is at work the
 choice stays as it began.
 
+The same menu offers “Works in” for eligible tasks and ideas built from their card: “A workspace
+of its own” or “The project folder”, with the repository default marked. It explains that the
+project folder uses the branch as it stands, without a task branch, and lists discardable changes.
+Picking the current default clears the override. A departure is stored on the card and named
+beside the button; closing, reloading, queuing, accepting a proposal or scheduling a later start
+keeps it. An unset choice follows the default until allocation. A started run keeps its resolved
+place through stop/resume and repository restarts. A workspace override uses a worktree when the
+repository default is project folder; clones remain the configured mode under clones. Prototypes,
+review cards, workstreams, builds on prototypes and new-repository builds do not offer this choice.
+A leased checkout and a folder without git do not offer it either. Both saving and allocation
+check eligibility; a saved choice cannot bypass a later change of kind or location. The phone
+uses the same menu, controls and saved choice.
+
 #### Updating Claude Code and Codex
 
 Which Claude Code is the newest, npm's registry says (the dist-tag of the channel Claude Code's own

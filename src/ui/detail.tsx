@@ -2,7 +2,7 @@
 
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { ApproveResult, CardPatch, Item, RepoRef, UpstreamRef } from '../core/types';
-import { agentListens, answering, archiveRefusal, askable, finished, handedOver, plannableAsProject, snoozable, stopped } from '../core/card';
+import { agentListens, answering, archiveRefusal, askable, finished, handedOver, plannableAsProject, snoozable, stopped, canChooseWorkIn } from '../core/card';
 import { ApiError, api, failText } from './api';
 import { cardPath } from './address';
 import { Naming } from './cardLink';
@@ -162,7 +162,7 @@ function QuestionView({ item, act, run, onTell, error }: View) {
  * What the owner types (maybe in reply to a message of its conversation) is what should change in
  * it: an agent reworks the proposal by it.
  */
-function ProposalView({ item, all, from, act, listener, onTell, editable, repos, choice, onEdit, onDelete, error }: View) {
+function ProposalView({ item, all, from, act, listener, onTell, editable, repos, choice, onEdit, onDelete, error, repo }: View) {
   const revising = item.proposal?.revising;
   const answer = useOpenQuestions(item);
   const idea = !!item.proposal?.idea;
@@ -215,7 +215,7 @@ function ProposalView({ item, all, from, act, listener, onTell, editable, repos,
           <Armed label={t.acceptWaits(idea || armed === 'idea')} undo={t.unaccept} onUndo={() => act({ action: 'unaccept' }, { close: false })} />
         ) : (
           // one to start later is planned and waits until then: taking it on is all there is to it
-          <StartOn item={item} act={act} on={!idea}>
+          <StartOn repo={repo} item={item} act={act} on={!idea}>
             <button className="btn primary" title={later ? t.startAt.accept : undefined} onClick={() => accept(true)}>
               {idea ? t.acceptIdea : later ? t.acceptOnly : t.accept}
             </button>
@@ -410,7 +410,7 @@ function TaskView(v: View) {
       <SupersededBox item={item} all={all} act={act} onDelete={v.onDelete} />
       <RepoDownBox item={item} />
 
-      {!waits && <QueueBox item={item} all={all} act={act} onClones={v.onClones} />}
+      {!waits && <QueueBox repo={repo} item={item} all={all} act={act} onClones={v.onClones} />}
 
       {item.prototypeOf && (
         <p className="hint">
@@ -450,7 +450,7 @@ function TaskView(v: View) {
         <Split
           main={
             <>
-              <QueueBox item={item} all={all} act={act} onClones={v.onClones} />
+              <QueueBox repo={repo} item={item} all={all} act={act} onClones={v.onClones} />
               {text({ fresh: true, grow: true })}
             </>
           }
@@ -545,7 +545,7 @@ function Where({ item, parent, worked, inFolder, change, onReadPlan }: { item: I
 }
 
 /** What a card in the queue waits for, with the buttons that start it anyway or take it out of the queue. */
-function QueueBox({ item, all, act, onClones }: { item: Item; all: Item[]; act: Act; onClones?: ((repo: string, field: 'clones' | 'slots') => void) | undefined }) {
+function QueueBox({ item, all, act, onClones, repo }: { repo?: RepoRef | undefined; item: Item; all: Item[]; act: Act; onClones?: ((repo: string, field: 'clones' | 'slots') => void) | undefined }) {
   const q = item.queue;
   if (item.state !== 'planned' || !q) return null;
   if ('checking' in q)
@@ -576,7 +576,7 @@ function QueueBox({ item, all, act, onClones }: { item: Item; all: Item[]; act: 
       <div className="actions">
         {/* behind other cards, it may start anyway */}
         {'behind' in q && (
-          <StartOn item={item} act={act} primary={false}>
+          <StartOn repo={repo} item={item} act={act} primary={false}>
             <button className="btn" onClick={() => act({ action: 'force' }, { close: true, ack: forcedText(q) })}>
               {t.queue.force}
             </button>
@@ -719,7 +719,7 @@ function TaskResult({ v, diff, tab, onTab, autoplay }: { v: View; diff: CardDiff
       )}
       {(item.state === 'inPr' || item.state === 'waiting') && item.morePrs?.map((pr) => <PrBox key={pr.url} pr={pr} />)}
       {item.state === 'inPr' && !item.pr && <p className="hint">{item.upstream && v.repo?.upstream ? t.pr.openingUpstream(v.repo.upstream.name) : t.pr.opening}</p>}
-      {item.finishing && finished(item.state) && <p className="hint">{item.followUp ? t.followingUpLong : item.restartPaused ? (item.state === 'done' ? t.restartPause.doneLong : t.restartPause.liveLong) : item.state === 'done' ? t.finishingDoneLong : t.finishingLong}</p>}
+      {item.finishing && finished(item.state) && <p className="hint">{item.followUp ? t.followingUpLong : item.restartPaused ? (item.state === 'done' ? t.restartPause.doneLong : t.restartPause.liveLong) : item.state === 'done' ? item.projectFolder ? t.folder.finishing : t.finishingDoneLong : t.finishingLong}</p>}
       <Brief item={item} />
     </>
   );
@@ -849,6 +849,7 @@ function ApproveButton({ item, act, lands, change, upstream }: { item: Item; act
           {item.noChange ? t.approveNoChange : t.approve}
         </button>
         <DiscardChanges diff={change.diff} act={act} onDone={change.reload} />
+        {item.projectFolder && !item.noChange && <span className="hint folder-approval">{t.folder.projectApproveHint}</span>}
       </>
     );
   // in a fork: the card's choice is the first button, the other one beside it
@@ -961,14 +962,14 @@ function TaskActions({ v, worked, proto, approve }: { v: View; worked: boolean; 
     item.newRepo?.due ? (
       <Armed label={makingWords(item, choice.name)} undo={t.undo} {...(item.newRepo.making ? {} : { onUndo: () => act({ action: 'stayHere' }, { close: false }) })} />
     ) : (
-      !item.snoozed && <StartButton item={item} act={act} on={!fresh} disabled={!!fresh && !fresh.ready} label={fresh?.button ?? t.start} hint={fresh?.hint ?? (item.projectFolder || (repo?.projectFolder && !item.parent && !item.prototypeOf && !item.contribution && !item.builtOn && !item.adopted && !item.upstream) ? t.folder.startHint : repo?.folder ? t.folder.startHint : t.startHint)} />
+      !item.snoozed && <StartButton repo={repo} item={item} act={act} on={!fresh} disabled={!!fresh && !fresh.ready} label={fresh?.button ?? t.start} hint={fresh?.hint ?? (item.projectFolder || (repo?.workInAvailable && canChooseWorkIn(item) && (item.workIn ? item.workIn === 'project-folder' : repo.projectFolder)) ? t.folder.startHint : repo?.folder ? t.folder.startHint : t.startHint)} />
     )
   ) : onPrototype && !item.snoozed ? (
-    <StartButton item={item} act={act} label={t.start} hint={t.startHint} />
+    <StartButton repo={repo} item={item} act={act} label={t.start} hint={t.startHint} />
   ) : rest ? (
-    <StartButton item={item} act={act} label={t.landedPart.start} hint={t.landedPart.startHint} />
+    <StartButton repo={repo} item={item} act={act} label={t.landedPart.start} hint={t.landedPart.startHint} />
   ) : (
-    halted && !item.archivedAt && <StartButton item={item} act={act} label={t.startAgain} hint={t.startAgainHint} />
+    halted && !item.archivedAt && <StartButton repo={repo} item={item} act={act} label={t.startAgain} hint={t.startAgainHint} />
   );
   const prototype = item.prototypeOf && <PrototypeActions item={item} act={act} proto={proto} />;
   // work waiting for the owner's verdict: its approval, or on a prototype its decisions

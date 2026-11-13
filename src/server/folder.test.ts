@@ -102,20 +102,20 @@ describe('undo', () => {
     writeFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'vom Owner\n');
     const view = (await ws.diff('a', false))!.folder!;
     const undo = Object.fromEntries(view.changes.map((c) => [c.path, c.undo]));
-    expect(view.undo).toMatch(/full|partial/);
+    expect(view.undo).toBe('partial');
     expect(undo['Nachlass/Liste.txt']).toBe('changedSince');
     expect(undo['Neu/Brief.txt']).toBe('yes');
     const report = await ws.undo('a');
     expect(readFileSync(join(folder, 'Nachlass', 'Liste.txt'), 'utf8')).toBe('vom Owner\n');
     expect(report.changedSince).toEqual(['Nachlass/Liste.txt']);
     expect(existsSync(join(folder, 'Neu'))).toBe(false);
-    if (view.undo === 'full') {
+    if (undo['Zähler.png'] === 'yes') {
       // a clone of the folder has the binaries
       expect(new Uint8Array(readFileSync(join(folder, 'Zähler.png')))).toEqual(bytes(3000, 5));
       expect(existsSync(join(folder, 'Scan.pdf'))).toBe(true);
     } else expect(report.lost.sort()).toEqual(['Scan.pdf', 'Zähler.png']);
     // what was left stays the card's
-    expect(await kinds('a')).toEqual([...(view.undo === 'full' ? [] : ['modified Zähler.png', 'deleted Scan.pdf']), 'modified Nachlass/Liste.txt']);
+    expect(await kinds('a')).toEqual([...(undo['Zähler.png'] === 'yes' ? [] : ['modified Zähler.png', 'deleted Scan.pdf']), 'modified Nachlass/Liste.txt']);
   });
 
   test('without a clone, moves, what the editing tools overwrite and the text files come back; a script\'s binary does not', async () => {
@@ -306,4 +306,13 @@ describe('another program writing during a call that writes nothing', () => {
     expect(await kinds('a')).toEqual([]);
     expect(await uncertain('a')).toEqual([]);
   });
+});
+
+test('undo coverage does not promise to remove an added directory containing an owner file', async () => {
+  ws.lease('a');
+  await call('a', 'Bash', { command: 'mkdir new-dir' }, () => mkdirSync(join(folder, 'new-dir')));
+  writeFileSync(join(folder, 'new-dir', 'owner.txt'), 'keep');
+  const diff = (await ws.diff('a', false))!.folder!;
+  expect(diff.changes[0]!.undo).toBe('changedSince');
+  expect(diff.undo).toBe('none');
 });

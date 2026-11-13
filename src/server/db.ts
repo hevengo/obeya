@@ -55,6 +55,8 @@ export interface CardRow {
   workspace: string | null;
   /** Resolved on first start; unaffected by later repository defaults. */
   work_place: 'workspace' | 'project-folder' | null;
+  /** Explicit pre-start choice; null follows the repository default. */
+  work_in: 'workspace' | 'project-folder' | null;
   branch: string | null;
   /** The worker's latest `report`. */
   status_line: string | null;
@@ -640,6 +642,7 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN adopted TEXT;',
   'ALTER TABLE cards ADD COLUMN code_video TEXT; ALTER TABLE cards ADD COLUMN code_videos TEXT;',
   'ALTER TABLE cards ADD COLUMN work_place TEXT;',
+  'ALTER TABLE cards ADD COLUMN work_in TEXT;',
 ];
 
 /**

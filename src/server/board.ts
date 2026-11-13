@@ -980,7 +980,7 @@ export class Board {
     this.own(id);
     const card = this.item(id);
     if (card?.kind === 'project') throw new BadRequest('project', 'a project is worked on through its workstreams');
-    if (card?.state !== 'planned' && card?.state !== 'proposal') throw new BadRequest('agentStarted', 'the card is at work or done: its agent keeps its harness and model');
+    if (card?.state !== 'planned' && card?.state !== 'proposal' && card?.state !== 'idea') throw new BadRequest('agentStarted', 'the card is at work or done: its agent keeps its harness and model');
     let chosen: CardAgent | null = null;
     if (agent !== null) {
       const { harness, model, effort, speed, ...other } = (agent && typeof agent === 'object' ? agent : {}) as Record<string, unknown>;

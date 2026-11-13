@@ -294,3 +294,7 @@ export function ownWords(e: Pick<CardEvent, 'text' | 'picks'>): string {
   const lead = e.picks?.join(', ');
   return lead && e.text.startsWith(lead) ? e.text.slice(lead.length).trim() : e.text;
 }
+
+/** Kinds that can work in place; prototypes and workstreams must have a branch to land. */
+export const canChooseWorkIn = (i: Pick<Item, 'kind' | 'parent' | 'prototypeOf' | 'contribution' | 'builtOn' | 'newRepo' | 'becomesProject' | 'adopted' | 'upstream'>) =>
+  i.kind === 'task' && !i.parent && !i.prototypeOf && !i.contribution && !i.builtOn && !i.newRepo && !i.becomesProject && !i.adopted && !i.upstream;

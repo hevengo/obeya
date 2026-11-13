@@ -1058,7 +1058,16 @@ export class FolderWorkspaces implements CardWorkspaces {
     const now = await entryAt(here);
     switch (t.kind) {
       case 'added':
-        return t.dir || (await unchanged(here, t.after, now)) ? 'yes' : 'changedSince';
+        if (t.dir) {
+          // Removing a directory also requires all its current contents to be removable.
+          if (!now?.dir) return 'changedSince';
+          for (const name of await readdir(here)) {
+            const child = this.rec(cardId)?.changes.find((c) => c.path === `${t.path}/${name}` && c.kind === 'added');
+            if (!child || await this.undoable(cardId, child) !== 'yes') return 'changedSince';
+          }
+          return 'yes';
+        }
+        return await unchanged(here, t.after, now) ? 'yes' : 'changedSince';
       case 'modified':
         if (!(await unchanged(here, t.after, now))) return 'changedSince';
         return (await this.copyOf(cardId, [t.was, t.path], t.before)) ? 'yes' : 'lost';
@@ -1219,6 +1228,7 @@ export class FolderWorkspaces implements CardWorkspaces {
       const changed = t.changed ? { changed: true as const } : {};
       const why = undo ? await this.undoable(cardId, t) : undefined;
       const c: FolderChange = { ...(await view(t)), ...changed };
+      if (this.o.git && (await spawnOutput([GIT, '-C', this.root, 'check-ignore', '--quiet', '--', t.path])).code === 0) c.ignored = true;
       if (undo) c.undo = why;
       if (!t.dir) {
         const patch = await this.filePatch(cardId, t);
@@ -1229,7 +1239,8 @@ export class FolderWorkspaces implements CardWorkspaces {
     }
     const uncertain: FolderChange[] = [];
     for (const t of rec.uncertain ?? []) uncertain.push(await view(t));
-    const folder: FolderChanges = { undo, changes, ...(uncertain.length ? { uncertain } : {}) };
+    const coverage = undo && changes.length ? changes.every((c) => c.undo === 'yes') ? 'full' : changes.some((c) => c.undo === 'yes') ? 'partial' : 'none' : undo;
+    const folder: FolderChanges = { undo: coverage, changes, ...(uncertain.length ? { uncertain } : {}) };
     return { ...cardDiff('folder', patches.join('\n'), full), folder };
   }
 

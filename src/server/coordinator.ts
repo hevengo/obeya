@@ -649,7 +649,9 @@ export class Coordinator {
         }
         // a card whose branch a clone keeps takes one on that clone's machine: none there leaves the others to the cards behind it
         const near = this.o.board.row(w.id).kept_in;
-        if (full.has(w.repo) || !this.o.repoFor(w).workspaces.leasable(false, near)) {
+        const spaces = this.o.repoFor(w).workspaces;
+        // Mixed repositories can have room in the project folder while every clone is taken.
+        if ((!spaces.folderFor && full.has(w.repo)) || !spaces.leasable(false, near, w.id)) {
           if (near) again = true;
           else full.add(w.repo);
           continue;

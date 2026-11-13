@@ -197,6 +197,7 @@ test('Claude SDK tracking hooks bracket ignored edits and failed commands', asyn
   writeFileSync(join(repo, 'source.txt'), 'before a command failed');
   await hooks.PostToolUseFailure[0]!.hooks[0]!({ ...command, hook_event_name: 'PostToolUseFailure' } as HookInput);
   expect(await changes(card.id)).toEqual(['.env', 'source.txt']);
+  expect((await canvas.diff(card.id, true))!.folder!.changes.find((c) => c.path === '.env')?.ignored).toBe(true);
 });
 
 test('stopping and resuming stays in place, never parks or stops the existing app', async () => {
@@ -433,4 +434,126 @@ test('a clone failure drains the home repository tracker before removing its run
   expect(removedEarly).toBe(false);
   expect(canvas.repos).not.toContain(runtimeRepo);
   expect(store.folderCard(card.id)).not.toBeNull();
+});
+
+test('an explicit workspace overrides the project-folder default and stays fixed', async () => {
+  const card = canvas.board.create({ title: 'Isolated override', x: 0, y: 0 });
+  canvas.act(card.id, { action: 'workIn', workIn: 'workspace' });
+  expect(canvas.board.item(card.id)!.workIn).toBe('workspace');
+  await canvas.repos[0]!.workers.start(card.id);
+  await canvas.repos[0]!.workers.prepared();
+  expect(store.card(card.id)!.work_place).toBe('workspace');
+  expect(store.card(card.id)!.workspace).not.toBe(repo);
+  expect(() => canvas.act(card.id, { action: 'workIn', workIn: null })).toThrow('already');
+});
+
+test('queued and later choices survive restart while an unset choice follows the new default', async () => {
+  const explicit = canvas.board.create({ title: 'Keep my choice', x: 0, y: 0 });
+  const follows = canvas.board.create({ title: 'Explicit project folder', x: 0, y: 0 });
+  const unset = canvas.board.create({ title: 'Queued without override', x: 0, y: 0 });
+  store.update(unset.id, { queue: JSON.stringify({ behind: [follows.id], reason: 'Wait for the other task', since: new Date().toISOString() }) });
+  canvas.act(explicit.id, { action: 'workIn', workIn: 'workspace' });
+  store.update(explicit.id, { queue: JSON.stringify({ behind: [follows.id], reason: 'Wait for the other task', since: new Date().toISOString() }) });
+  await canvas.shutdown();
+  runtime = new FakeRuntime();
+  canvas = await CanvasRuntime.start({ repos: [{ path: repo, settings: { workspaces: 'worktrees' } }] }, { store, home: dir, runtime, forge: noForge });
+  expect(canvas.board.item(explicit.id)!.workIn).toBe('workspace');
+  // A departure remains explicit even when the default now happens to equal it.
+  canvas.act(follows.id, { action: 'workIn', workIn: 'project-folder' });
+  expect(store.card(follows.id)!.work_place).toBeNull();
+  const defaulted = unset;
+  const spaces = canvas.repos[0]!.workspaces;
+  const a = spaces.lease(explicit.id, 'explicit'); await a.ready;
+  const b = spaces.lease(follows.id, 'in-place'); await b.ready;
+  const c = spaces.lease(defaulted.id, 'defaulted'); await c.ready;
+  expect(a.path).not.toBe(repo);
+  expect(b.path).toBe(repo);
+  expect(c.path).not.toBe(repo);
+  expect(store.card(explicit.id)!.work_place).toBe('workspace');
+  expect(store.card(follows.id)!.work_place).toBe('project-folder');
+});
+
+test('place can be reset to follow the default and invalid or ineligible choices are refused', async () => {
+  const card = canvas.board.create({ title: 'Choose and reset', x: 0, y: 0 });
+  canvas.act(card.id, { action: 'workIn', workIn: 'workspace' });
+  canvas.act(card.id, { action: 'workIn', workIn: null });
+  expect(canvas.board.item(card.id)!.workIn).toBeUndefined();
+  expect(() => canvas.act(card.id, { action: 'workIn', workIn: 'bad' as never })).toThrow('unknown');
+  for (const patch of [{ parent_id: card.id }, { prototype_of: card.id }, { contribution: '{}' }, { built_on: card.id }, { adopted: '{}' }, { upstream: '1' }]) {
+    const other = canvas.board.create({ title: 'Exception', x: 0, y: 0 });
+    store.db.run(`UPDATE cards SET ${Object.keys(patch)[0]} = ? WHERE id = ?`, [Object.values(patch)[0]!, other.id]);
+    expect(() => canvas.act(other.id, { action: 'workIn', workIn: 'project-folder' })).toThrow('cannot choose');
+    // A previously saved override cannot bypass eligibility after the card changes kind.
+    store.update(other.id, { work_in: 'project-folder' });
+    const lease = canvas.repos[0]!.workspaces.lease(other.id, `exception-${other.id}`);
+    await lease.ready;
+    expect(lease.path).not.toBe(repo);
+  }
+  canvas.repos[0]!.ref.workInAvailable = undefined;
+  expect(() => canvas.act(card.id, { action: 'workIn', workIn: 'project-folder' })).toThrow('cannot choose');
+});
+
+test('accepted proposals, follow-ups and an idea built from its card retain the place choice', async () => {
+  const from = canvas.board.create({ title: 'Original', x: 0, y: 0 });
+  const proposal = canvas.board.create({ title: 'Proposed', from: from.id, x: 0, y: 0 });
+  canvas.act(proposal.id, { action: 'workIn', workIn: 'workspace' });
+  store.update(proposal.id, { state: 'proposal' });
+  canvas.board.accept(proposal.id);
+  const idea = canvas.board.create({ title: 'Idea', idea: true, x: 0, y: 0 });
+  canvas.act(idea.id, { action: 'workIn', workIn: 'workspace' });
+  // The idea's conversion keeps its identity and saved choice.
+  canvas.act(idea.id, { action: 'build' });
+  const follow = canvas.board.create({ title: 'Follow-up', from: from.id, x: 0, y: 0 });
+  canvas.act(follow.id, { action: 'workIn', workIn: 'workspace' });
+  for (const card of [proposal, idea, follow]) {
+    expect(canvas.board.item(card.id)!.workIn).toBe('workspace');
+    const lease = canvas.repos[0]!.workspaces.lease(card.id, `own-${card.id}`); await lease.ready;
+    expect(lease.path).not.toBe(repo);
+  }
+});
+
+test('choosing the existing repository still permits a project-folder run', async () => {
+  const card = canvas.board.create({ title: 'Explicit repository', x: 0, y: 0 });
+  canvas.board.patch(card.id, { repo: canvas.repos[0]!.ref.id });
+  canvas.act(card.id, { action: 'workIn', workIn: 'project-folder' });
+  const lease = canvas.repos[0]!.workspaces.lease(card.id, 'existing-repository');
+  await lease.ready;
+  expect(lease.path).toBe(repo);
+});
+
+test('undo coverage reflects protected files rather than snapshot support', async () => {
+  const { card, session } = await start();
+  await session.use('Write', { file_path: join(repo, 'source.txt') }, () => writeFileSync(join(repo, 'source.txt'), 'task\n'));
+  await session.use('Write', { file_path: join(repo, 'other.txt') }, () => writeFileSync(join(repo, 'other.txt'), 'task\n'));
+  await Bun.sleep(10);
+  writeFileSync(join(repo, 'source.txt'), 'owner\n');
+  expect((await canvas.diff(card.id, false))!.folder!.undo).toBe('partial');
+  writeFileSync(join(repo, 'other.txt'), 'owner\n');
+  expect((await canvas.diff(card.id, false))!.folder!.undo).toBe('none');
+});
+
+test('a queued project-folder override starts when its local slot is free even with every clone occupied', async () => {
+  await canvas.shutdown();
+  runtime = new FakeRuntime();
+  canvas = await CanvasRuntime.start({ repos: [{ path: repo, slots: 1, settings: { workspaces: 'clones' } }] }, { store, home: dir, runtime, forge: noForge });
+  const spaces = canvas.repos[0]!.workspaces as Workspaces;
+  await spaces.ensureClones(repo, 1);
+  const holding = canvas.board.create({ title: 'Holds the clone', x: 0, y: 0 });
+  await spaces.lease(holding.id, 'holds-clone').ready;
+  const first = canvas.board.create({ title: 'First in place', x: 0, y: 0 });
+  const waiting = canvas.board.create({ title: 'Second in place', x: 0, y: 0 });
+  for (const card of [first, waiting]) canvas.act(card.id, { action: 'workIn', workIn: 'project-folder' });
+  await canvas.repos[0]!.workers.start(first.id);
+  await canvas.repos[0]!.workers.prepared();
+  for (let n = 0; n < 100 && !runtime.sessions.some((s) => s.spec.spendOn === first.id); n++) await Bun.sleep(10);
+  // An earlier queued task needs a clone. Its shortage must not hold the in-place task behind it.
+  const cloneWaiter = canvas.board.create({ title: 'Needs a clone', x: 0, y: 0 });
+  store.update(cloneWaiter.id, { queue: JSON.stringify({ workspace: 'none', since: '2020-01-01T00:00:00Z' }) });
+  (canvas.coordinator as unknown as { launch(id: string): void }).launch(waiting.id);
+  for (let n = 0; n < 100 && !canvas.board.item(waiting.id)?.queue; n++) await Bun.sleep(10);
+  expect(canvas.board.item(waiting.id)?.queue).toHaveProperty('workspace', 'slots');
+  await canvas.repos[0]!.workers.stop(first.id);
+  for (let n = 0; n < 150 && canvas.board.item(waiting.id)?.state !== 'working'; n++) await Bun.sleep(10);
+  expect(canvas.board.item(waiting.id)?.state).toBe('working');
+  expect(store.card(waiting.id)!.work_place).toBe('project-folder');
 });

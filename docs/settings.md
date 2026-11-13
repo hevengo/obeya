@@ -149,8 +149,10 @@ them there, uncommitted unless a commit was requested. Git-ignored script output
 ignored files edited directly by the worker are included. Demos follow the usual git-repository
 rules. Prototypes, pull request reviews, workstreams and builds on a prototype use their own
 worktree. This option is local only and not available for a checkout registered in the clone pool.
-A run keeps the place resolved at its start across restarts and default changes. There is no
-per-task override yet. Folders without git keep their existing behaviour.
+A run keeps the place resolved at its start across restarts and default changes. The start-button menu offers a per-task “Works in” override, including on accepted proposals,
+follow-ups and ideas built from their card. A workspace override uses a worktree when this
+default is project folder; clones remain clones. A saved departure survives closing, reload and
+queuing; an unset choice follows the default until start. Folders without git keep their existing behaviour.
 
 ### `prNoise` — account names
 

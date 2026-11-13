@@ -2,7 +2,7 @@
 // boxes and buttons several kinds of card have.
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import type { CardAction, CardPatch, Item } from '../core/types';
+import type { CardAction, CardPatch, Item, RepoRef } from '../core/types';
 import { stopped, archiveRefusal, finishingUp, snoozable } from '../core/card';
 import { api, type Field } from './api';
 import { Naming } from './cardLink';
@@ -114,19 +114,19 @@ export function Later({ item, act }: { item: Item; act: Act }) {
 }
 
 /** A button that starts the card (`children`), with the menu of what its agent runs on joined to it where `on`. */
-export function StartOn({ item, act, on = true, primary, children }: { item: Item; act: Act; on?: boolean; primary?: boolean; children: ReactNode }) {
+export function StartOn({ item, repo, act, on = true, primary, children }: { item: Item; repo?: RepoRef | undefined; act: Act; on?: boolean; primary?: boolean; children: ReactNode }) {
   if (!on || item.kind === 'project') return <>{children}</>;
   return (
-    <AgentPick item={item} act={(a) => act(a, { close: false })} {...(primary === false ? { primary } : {})}>
+    <AgentPick repo={repo} item={item} act={(a) => act(a, { close: false })} {...(primary === false ? { primary } : {})}>
       {children}
     </AgentPick>
   );
 }
 
 /** "Start" in its variants (`label`, `hint`): starts the card, with the menu of what its agent runs on joined to it where `on`. */
-export function StartButton({ item, act, label, hint, disabled, on }: { item: Item; act: Act; label: string; hint: string; disabled?: boolean; on?: boolean }) {
+export function StartButton({ item, repo, act, label, hint, disabled, on }: { item: Item; repo?: RepoRef | undefined; act: Act; label: string; hint: string; disabled?: boolean; on?: boolean }) {
   return (
-    <StartOn item={item} act={act} on={on}>
+    <StartOn repo={repo} item={item} act={act} on={on}>
       <button className="btn primary" disabled={disabled} title={hint} onClick={() => act({ action: 'start' }, { close: false })}>
         {label}
       </button>

@@ -2563,3 +2563,10 @@ button.link:hover { text-decoration: underline; }
 /* what an arrow does, beside the pointer while the owner draws their first */
 #dephint { position: fixed; z-index: 40; pointer-events: none; transform: translate(16px, 16px); max-width: 300px; margin: 0; padding: 6px 10px; border-radius: 3px;
   background: var(--ink); color: var(--bg); font: 13px/1.35 var(--cond); text-align: left; animation: fade .15s ease-out; }
+
+.agent-place { border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.agent-place-hint { margin: 6px 12px; max-width: 330px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.folder-approval { flex-basis: 100%; }
+
+#ph-card .agent-split { flex-wrap: wrap; max-width: 100%; }
+#ph-card .agent-chosen { flex-basis: 100%; margin: 5px 0 0; white-space: normal; }

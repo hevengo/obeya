@@ -31,11 +31,11 @@ export interface DiffFile {
 export interface FolderChanges {
   project?: true;
   /**
-   * Which undo the card has: `full` from a clone of the folder taken at its start (where the file
-   * system clones), `partial` from copies of what its editing tools overwrote and of the folder's
-   * text files; null once nothing can be undone (the card is done).
+   * Which listed changes are recoverable: all (`full`), some (`partial`), or none (`none`).
+   * Files edited later, shared with another task, or without an earlier copy cannot be restored.
+   * Null after approval, when discard is no longer offered.
    */
-  undo: 'full' | 'partial' | null;
+  undo: 'full' | 'partial' | 'none' | null;
   changes: FolderChange[];
   /**
    * What changed while only calls of the card ran that write nothing (a command that only reads or
@@ -65,6 +65,8 @@ export interface FolderChange {
    * that card's (`shared`). None once nothing can be undone.
    */
   undo?: 'yes' | 'lost' | 'changedSince' | 'shared';
+  /** Ignored by git, included because an editing tool directly edited this file. */
+  ignored?: true;
 }
 
 /** The changes as the owner reads them: a directory the card added shows through what it put in it, a deleted one stands for what it held. */
@@ -72,7 +74,7 @@ export function shownChanges(changes: FolderChange[]): FolderChange[] {
   const gone = changes.filter((c) => c.dir && c.kind === 'deleted').map((c) => c.path);
   return changes.filter((c) => {
     if (gone.some((d) => c.path.startsWith(`${d}/`))) return false;
-    if (c.dir && c.kind === 'added') return !changes.some((x) => x !== c && x.path.startsWith(`${c.path}/`));
+    if (c.dir && c.kind === 'added' && (!c.undo || c.undo === 'yes')) return !changes.some((x) => x !== c && x.path.startsWith(`${c.path}/`));
     return true;
   });
 }

@@ -236,6 +236,15 @@ shows the whole diff over the page; "Copy path" copies the workspace's directory
 another machine), on a page that may not write the clipboard too, as a code block's button does
 (so do the share link's "Copy" and the setup's copy buttons). The owner rarely reads code, so it stays a quiet line.
 
+A task working in the project folder shows “Changed in the project folder”, with its file count,
+lines added and removed, and undo coverage. Its change list and text diffs use the same controls
+as folder cards, including on the phone. A directly edited ignored file is labelled “ignored by
+git”; ignored script output is excluded. Undo coverage describes recoverable listed files, with
+per-file reasons for anything that stays (changed since, shared with another task, or no earlier
+copy). Approval visibly explains that the changes stay in the project folder uncommitted unless
+the task committed them; it completes the task without landing. See Agents and workspaces for
+tracking and discard safeguards.
+
 #### The files beside the demo
 
 What a card's work made or changed is its result, shown on the left for folder and git cards alike.

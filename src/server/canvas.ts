@@ -17,7 +17,7 @@ import type { RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
 import type { Awaited, CardAction, CardPatch, Item, PendingRestart, RepoRef, ProposedSetting, Skill, SpotInput } from '../core/types';
-import { stopped, agentListens, awaited, awaitsContributorNext, untouched, finished, nameless, needsYou, pausable, halted, snoozable, laterTime, plannedToStart } from '../core/card';
+import { stopped, agentListens, awaited, awaitsContributorNext, untouched, finished, nameless, needsYou, pausable, halted, snoozable, laterTime, plannedToStart, canChooseWorkIn } from '../core/card';
 import { AGENT_DEFAULTS, type AgentRole, type AgentSetting } from '../core/agents';
 import { type CanvasConfig, layerSettings, type RepoConfig, repoShape, type RepoSettings, type SettingsShared, SHARED_FIELDS, type DemoSite } from '../core/config';
 import { holdsNotes } from '../core/queue';
@@ -806,6 +806,7 @@ export class CanvasRuntime {
       // the folders of Obeya's clones that left the pool earlier go once nothing in them would be lost
       git.sweep();
       const tracker = new FolderWorkspaces(deps.store, { path: info.path, dir: join(deps.home, 'undo', resolved.id, ref.id), git: true });
+      if (!deps.store.hasWorkspace(info.path)) ref.workInAvailable = true;
       stops.push(() => tracker.dispose());
       workspaces = projectWorkspaces(deps.store, git, tracker, adapter.workspaces === 'project-folder', !deps.store.hasWorkspace(info.path));
     }
@@ -1757,6 +1758,18 @@ export class CanvasRuntime {
         return void this.coordinator.name(cardId);
       case 'force':
         return this.coordinator.force(cardId);
+      case 'workIn': {
+        const row = this.deps.store.card(cardId);
+        if (!card || !row) throw new BadRequest('invalid', 'card not found');
+        if (row.work_place || row.branch || row.workspace || !['planned', 'proposal', 'idea'].includes(card.state))
+          throw new BadRequest('workInStarted', 'the run already has its place');
+        if (!canChooseWorkIn(card) || row.parent_id || row.prototype_of || row.contribution || row.built_on || row.adopted || row.upstream || row.becomes_project || !this.repoOf(cardId).ref.workInAvailable)
+          throw new BadRequest('workInUnavailable', 'this card cannot choose its place');
+        if (a.workIn !== null && a.workIn !== 'workspace' && a.workIn !== 'project-folder')
+          throw new BadRequest('invalid', 'unknown work place');
+        this.deps.store.update(cardId, { work_in: a.workIn });
+        return this.board.changed();
+      }
       case 'agent':
         return this.board.chooseAgent(cardId, a.agent);
       case 'dequeue':

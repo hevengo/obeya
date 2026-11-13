@@ -6,9 +6,10 @@
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { CardAction, Item } from '../core/types';
+import type { CardAction, Item, RepoRef } from '../core/types';
 import { AGENT_EFFORTS, AGENT_SPEEDS, type AgentSpeed, type AgentEffort, type AgentModel, type AgentsView, type HarnessUpdate as HarnessUpdateState, type CardAgent, type Harness, HARNESSES, modelChoices, type ModelChoice, modelName } from '../core/agents';
 import { useMenuClose, usePlaced } from './menu';
+import { canChooseWorkIn } from '../core/card';
 import { api } from './api';
 import { usePoll } from './act';
 import { t } from './strings';
@@ -38,7 +39,7 @@ const choice = (c: CardAgent): CardAgent | null => (c.harness || c.effort || c.s
  * the menu of harnesses, models, efforts and Codex speeds, in the start button's colours (`primary`); a choice of
  * the card's own is named beside them. Where the harnesses are not known (yet), the start button alone.
  */
-export function AgentPick({ item, act, primary = true, children }: { item: Item; act: (a: CardAction) => Promise<void>; primary?: boolean; children: ReactNode }) {
+export function AgentPick({ item, repo, act, primary = true, children }: { repo?: RepoRef | undefined; item: Item; act: (a: CardAction) => Promise<void>; primary?: boolean; children: ReactNode }) {
   const [view, setView] = useState<AgentsView | null>(last);
   const [open, setOpen] = useState(false);
   // a start while the choice is still on its way would run on the one before
@@ -84,7 +85,14 @@ export function AgentPick({ item, act, primary = true, children }: { item: Item;
   const pickSpeed = (s: AgentSpeed) => save(choice({ ...own, speed: s !== (group.speed ?? 'normal') ? s : undefined }));
   const speed = own.speed ?? group.speed ?? 'normal';
   const effort = own.effort ?? group.effort;
-  const chosen = [mine ? agentLabel(view, mine.harness, mine.model) : '', own.effort ? p.chosenEffort(efforts[own.effort]) : '', harness === 'codex' && own.speed ? p.chosenSpeed(t.config.agents.speeds[own.speed]) : ''].filter(Boolean).join(' · ');
+  const placeChoice = !!repo?.workInAvailable && canChooseWorkIn(item) && !item.workPlace && !item.branch && !item.projectFolder && !item.workspace;
+  const defaultPlace = repo?.projectFolder ? 'project-folder' : 'workspace';
+  const place = item.workIn ?? defaultPlace;
+  const pickPlace = (next: 'workspace' | 'project-folder') => {
+    setSaving(true);
+    void act({ action: 'workIn', workIn: next === defaultPlace ? null : next }).catch(() => {}).finally(() => setSaving(false));
+  };
+  const chosen = [canChooseWorkIn(item) && item.workIn ? p.places[item.workIn] : '', mine ? agentLabel(view, mine.harness, mine.model) : '', own.effort ? p.chosenEffort(efforts[own.effort]) : '', harness === 'codex' && own.speed ? p.chosenSpeed(t.config.agents.speeds[own.speed]) : ''].filter(Boolean).join(' · ');
   return (
     <span className={saving ? 'agent-split saving' : 'agent-split'} ref={box}>
       {children}
@@ -111,6 +119,14 @@ export function AgentPick({ item, act, primary = true, children }: { item: Item;
       {open &&
         createPortal(
           <div className="snooze-menu agent-menu" role="menu" ref={menu}>
+            {placeChoice && <div className="agent-place" role="group" aria-label={p.workIn}>
+              <div className="snooze-h agent-h">{p.workIn}</div>
+              {(['workspace', 'project-folder'] as const).map((value) => <button disabled={saving} key={value} className="snooze-opt" role="menuitemradio" aria-checked={place === value} onClick={() => pickPlace(value)}>
+                <Check on={place === value} />{p.places[value]}{value === defaultPlace && <span className="agent-version">{p.repoDefault}</span>}
+              </button>)}
+              <p className="agent-place-hint">{p.placeHint}</p>
+            </div>}
+
             {HARNESSES.map((h: Harness) => {
               const found = listed(h);
               if (!found?.ready)

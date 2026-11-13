@@ -18,7 +18,7 @@ can be discarded without a branch or a landing.
 
 - `workspaces` chooses worktrees, clones or the project folder, layered with this machine's
   configuration. A run keeps its resolved place across restarts and default changes. The shared
-  start-button menu still chooses only the agent, model and effort; per-task place is W2.
+  start-button menu also chooses the per-task place; an unset choice follows the default until start.
 - Ordinary tasks can use the configured checkout as it stands. Prototypes, pull request reviews,
   workstreams and builds on a prototype retain isolated workspaces. Checkout runs have no task
   branch or landing, skip setup, keep normal checks and never park or stop the existing app.
@@ -123,7 +123,7 @@ left the affected files. Retain the existing protection for local changes with n
   evidence for this mode. Demo a whole repository using the default, including changed files,
   discard and approval. Update the workspace, parking, configuration and landing design text
   and `docs/settings.md` to describe only what this step ships.
-- [ ] **W2:** Let each task choose its place before starting. After W1, add “Works in” to the
+- [x] **W2:** Let each task choose its place before starting. After W1, add “Works in” to the
   shared start-button menu beside the agent choice, with the repository default marked, the
   project-folder explanation and an explicit choice named beside the button. Store the override
   with the card and carry it through every eligible start path: tasks, follow-ups, accepted
