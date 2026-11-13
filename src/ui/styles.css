@@ -2570,3 +2570,5 @@ button.link:hover { text-decoration: underline; }
 
 #ph-card .agent-split { flex-wrap: wrap; max-width: 100%; }
 #ph-card .agent-chosen { flex-basis: 100%; margin: 5px 0 0; white-space: normal; }
+.actions:has(> .folder-approval) { flex-wrap: wrap; }
+.folder-approval { order: 1; }
