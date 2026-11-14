@@ -569,7 +569,7 @@ export interface CardWorkspaces {
   leasable(overSlots?: boolean, near?: string | null): boolean;
   pool(busy: string[]): PoolHost[];
   keepLeftovers(path: string, host?: string): Promise<string | null>;
-  hasWork(cardId: string): Promise<boolean>;
+  hasWork(cardId: string, refresh?: boolean): Promise<boolean>;
   release(cardId: string): void;
   evict(cardId: string): Promise<string | null>;
   abandon(path: string): Promise<boolean>;
@@ -1217,15 +1217,16 @@ export class Workspaces implements CardWorkspaces {
    * Whether the card's workspace holds work: uncommitted changes or commits beyond the base. Asked
    * without blocking the server: `git status` in a large repository, or over SSH, takes a while.
    */
-  async hasWork(cardId: string): Promise<boolean> {
+  async hasWork(cardId: string, refresh = false): Promise<boolean> {
     const ws = this.leasedBy(cardId);
     const making = this.preparing.get(cardId);
     // a restored card's clone git is putting back on its branch holds its work: told once git is done
-    if (making && this.retaking.has(cardId)) return making.then(() => this.hasWork(cardId), () => this.hasWork(cardId));
+    if (making && this.retaking.has(cardId)) return making.then(() => this.hasWork(cardId, refresh), () => this.hasWork(cardId, refresh));
     // one git is still making ready holds nothing of the card's yet
     if (!ws || making) return false;
     try {
       if (!(await existsAsync(ws))) return false;
+      if (refresh && this.cloned(ws)) await gitAsync(ws, 'fetch', '--quiet', 'origin');
       // `# branch.…` headers, then a line per change; the main branch beside it, which a `forkPoint` asked at the same time shares
       const [lines, up] = await Promise.all([gitAsync(ws, ...LOOK, 'status', '--porcelain=v2', '--branch'), this.upstreamAsync(ws)]);
       const status = lines.split('\n');

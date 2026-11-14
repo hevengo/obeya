@@ -16,7 +16,7 @@ import type { RepoAdapter, RepoInfo } from '../adapters/types';
 import type { CardDiff } from '../core/diff';
 import type { Language } from '../core/locale';
 import type { Awaited, CardAction, CardPatch, Item, PendingRestart, RepoRef, ProposedSetting, Skill, SpotInput } from '../core/types';
-import { agentListens, awaited, awaitsContributorNext, untouched, finished, nameless, needsYou, pausable, halted, snoozable, laterTime, plannedToStart } from '../core/card';
+import { stopped, agentListens, awaited, awaitsContributorNext, untouched, finished, nameless, needsYou, pausable, halted, snoozable, laterTime, plannedToStart } from '../core/card';
 import { AGENT_DEFAULTS, type AgentRole, type AgentSetting } from '../core/agents';
 import { type CanvasConfig, layerSettings, type RepoConfig, repoShape, type RepoSettings, type SettingsShared, SHARED_FIELDS, type DemoSite } from '../core/config';
 import { holdsNotes } from '../core/queue';
@@ -1949,6 +1949,14 @@ export class CanvasRuntime {
     releaseHeld(this.board, card.id);
     this.board.work(card.id, PLANNED_AGAIN);
     this.board.log(card.id, 'state', 'owner', card.pr ? t.stoppedPrOpen(card.pr.number) : t.stopped);
+  }
+
+  /** Archives a stopped card after checking work retained since Stop. */
+  async archive(cardId: string) {
+    const card = this.board.item(cardId);
+    if (card && stopped(card) && card.kind === 'task' && card.source === 'manual' && !card.prototypeOf && !card.queue && card.workspace && !card.repoDown)
+      await this.repoOf(card).workers.freeStoppedWorkspace(cardId, true);
+    this.board.archive([cardId]);
   }
 
   /** Brings a deleted card back (the owner's undo), with the workspace it had where that is still free. */

@@ -7,7 +7,7 @@ import { LANGUAGES } from '../core/locale';
 import { MESSAGES, type Messages, type Pause } from '../core/messages';
 import { changeSize, docImages, fileKind, isImage, normalPath, shownFiles } from '../core/files';
 import { type Awaited, type WorkerTurn, type ChangeSize, type Item, type Question, type RestartReason, type Share, type Snooze, type Spot, type SpotInput, type ChangeRoute, type UpstreamRef, type AdoptedPr } from '../core/types';
-import { answering, askable, pausable, pausableNow, formatQuestion, handedOver, needsYou } from '../core/card';
+import { stopped, answering, askable, pausable, pausableNow, formatQuestion, handedOver, needsYou } from '../core/card';
 import { cardAgentOf } from '../core/agents';
 import type { CardLanding } from '../core/config';
 import { BadRequest, type Board, notPaused, pauseRefused, replyNote } from './board';
@@ -1858,12 +1858,18 @@ export class Workers {
     this.takeHeld(cardId);
     this.end(cardId);
     this.bump(cardId);
-    const still = this.sameRun(cardId);
-    const path = this.o.board.row(cardId).workspace;
     this.o.board.work(cardId, PLANNED_AGAIN);
     said();
-    return this.o.workspaces.hasWork(cardId).then((keep) => {
-      if (keep || !still() || this.o.board.row(cardId).workspace !== path) return;
+    return this.freeStoppedWorkspace(cardId);
+  }
+
+  /** Rechecks retained work before archiving, including work merged since Stop. */
+  freeStoppedWorkspace(cardId: string, refresh = false): Promise<void> {
+    const still = this.sameRun(cardId);
+    const path = this.o.board.row(cardId).workspace;
+    return this.o.workspaces.hasWork(cardId, refresh).then((keep) => {
+      const card = this.o.board.item(cardId);
+      if (keep || !card || !stopped(card) || card.queue || !still() || this.o.board.row(cardId).workspace !== path) return;
       this.o.workspaces.release(cardId);
       this.o.board.work(cardId, { workspace: null });
     });
