@@ -53,6 +53,8 @@ export interface CardRow {
   agent: Json<CardAgent> | null;
   /** Leased clone and branch while a worker has the card. */
   workspace: string | null;
+  /** Resolved on first start; unaffected by later repository defaults. */
+  work_place: 'workspace' | 'project-folder' | null;
   branch: string | null;
   /** The worker's latest `report`. */
   status_line: string | null;
@@ -74,6 +76,9 @@ export interface CardRow {
   demo: Json<StoredDemo> | null;
   /** The demos of earlier handovers a later one replaced, the oldest first, each as `demo` was; append only. */
   demos: Json<StoredDemo[]> | null;
+  /** Private code video and append-only history. */
+  code_video: Json<StoredDemo> | null;
+  code_videos: Json<StoredDemo[]> | null;
   /** When the owner took the finished card off the canvas into the archive. */
   archived_at: string | null;
   /** An idea's status and brief. */
@@ -633,6 +638,8 @@ export const MIGRATIONS = [
   'CREATE INDEX talk_looking_up ON talk (canvas_id) WHERE question IS NOT NULL AND answer IS NULL AND joined IS NULL AND stopped IS NULL;',
   // a task that works on a branch of the owner's that existed before it (`CardRow.adopted`)
   'ALTER TABLE cards ADD COLUMN adopted TEXT;',
+  'ALTER TABLE cards ADD COLUMN code_video TEXT; ALTER TABLE cards ADD COLUMN code_videos TEXT;',
+  'ALTER TABLE cards ADD COLUMN work_place TEXT;',
 ];
 
 /**
@@ -684,7 +691,7 @@ export type NewRow = Pick<CardRow, 'canvas_id' | 'kind' | 'x' | 'y'> &
  * what its agent reports and hands over. Its place, its group, its folding and the bookkeeping behind
  * it (session, workspace, queue, what was read or heard) do not count.
  */
-const SEEN = new Set<string>(['state', 'need', 'title', 'body', 'status_line', 'detail', 'demo', 'files', 'idea', 'proposal', 'prototype', 'images', 'pr', 'contribution', 'thread', 'shipped', 'landed', 'archived_at', 'paused', 'snoozed', 'share', 'app', 'plan']);
+const SEEN = new Set<string>(['state', 'need', 'title', 'body', 'status_line', 'detail', 'demo', 'code_video', 'files', 'idea', 'proposal', 'prototype', 'images', 'pr', 'contribution', 'thread', 'shipped', 'landed', 'archived_at', 'paused', 'snoozed', 'share', 'app', 'plan']);
 
 /** What `Store.update` may change on a card: all but what is set once at its creation, and its times. */
 export type RowUpdate = Partial<Omit<CardRow, 'id' | 'canvas_id' | 'parent_id' | 'plan_ref' | 'prototype_of' | 'retro' | 'created_at' | 'updated_at' | 'changed_at'>>;
@@ -729,7 +736,7 @@ export class Store {
     this.db = new Database(path, { strict: true });
     this.db.run('PRAGMA journal_mode = WAL');
     this.db.run('PRAGMA foreign_keys = ON');
-    const { user_version } = this.db.query('PRAGMA user_version').get() as { user_version: number };
+    let { user_version } = this.db.query('PRAGMA user_version').get() as { user_version: number };
     const latest = RELEASED + MIGRATIONS.length;
     if (user_version > latest || (user_version > 0 && user_version < RELEASED)) {
       this.db.close();
@@ -740,6 +747,20 @@ export class Store {
         this.db.run(SCHEMA);
         this.db.run(`PRAGMA user_version = ${RELEASED}`);
       })();
+    // The original fork used v86/v87 for videos/work_place, while upstream used
+    // those positions for resumes/joined. Recognize only that known schema and
+    // bridge it atomically; subsequent versions follow upstream's order.
+    if (user_version === 86 || user_version === 87) {
+      const columns = new Set((this.db.query('PRAGMA table_info(cards)').all() as { name: string }[]).map((c) => c.name));
+      if (columns.has('code_video') && columns.has('code_videos') && !columns.has('resumes')) {
+        this.db.transaction(() => {
+          for (const migration of MIGRATIONS.slice(45, 51)) this.db.run(migration);
+          if (!columns.has('work_place')) this.db.run(MIGRATIONS[52]!);
+          this.db.run('PRAGMA user_version = 93');
+        })();
+        user_version = 93;
+      }
+    }
     for (let v = Math.max(user_version, RELEASED); v < latest; v++) {
       this.db.transaction(() => {
         this.db.run(MIGRATIONS[v - RELEASED]!);

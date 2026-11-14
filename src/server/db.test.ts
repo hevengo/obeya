@@ -267,3 +267,45 @@ test('the migration gives what the Coordinator said, looked up and decided as `k
     expect(after.cardDecisions('c', 'card').map((d) => d.by)).toEqual(['coordinator']);
     after.db.close();
   }));
+
+test('adding code videos preserves a legacy handover and stores each history independently', () =>
+  withPath((path) => {
+    const s = new Store(path);
+    s.ensureCanvas('c', 'C');
+    const [card] = s.insert([{ canvas_id: 'c', kind: 'task', x: 0, y: 0 }]);
+    const legacy = JSON.stringify({ dir: '/demo', kind: 'video', chapters: [], handover: 1 });
+    s.update(card!.id, { demo: legacy });
+    s.db.run('ALTER TABLE cards DROP COLUMN work_place');
+    s.db.run('ALTER TABLE cards DROP COLUMN code_video');
+    s.db.run('ALTER TABLE cards DROP COLUMN code_videos');
+    s.db.run(`PRAGMA user_version = ${RELEASED + MIGRATIONS.length - 2}`);
+    s.db.close();
+    const current = new Store(path);
+    expect(current.card(card!.id)).toMatchObject({ demo: legacy, code_video: null, code_videos: null });
+    const code = JSON.stringify({ dir: '/code', kind: 'video', chapters: [], handover: 2 });
+    current.update(card!.id, { code_video: code, code_videos: '[]' });
+    current.db.close();
+    const reopened = new Store(path);
+    expect(reopened.card(card!.id)).toMatchObject({ demo: legacy, code_video: code, code_videos: '[]' });
+    reopened.db.close();
+  }));
+
+test.each([false, true])('upgrades the historical fork schema without losing private videos or work place (project folder: %s)', (projectFolder) =>
+  withPath((path) => {
+    // Both histories share 45 migrations. The fork's v86/v87 used the next two
+    // positions for videos/work_place; upstream used them for resumes/joined.
+    const db = databaseBefore(path, 45);
+    db.run('ALTER TABLE cards ADD COLUMN code_video TEXT; ALTER TABLE cards ADD COLUMN code_videos TEXT;');
+    if (projectFolder) db.run('ALTER TABLE cards ADD COLUMN work_place TEXT;');
+    db.run(`PRAGMA user_version = ${RELEASED + 46 + Number(projectFolder)}`);
+    db.run("INSERT INTO cards (id, short, number, canvas_id, kind, x, y, created_at, updated_at, code_video, code_videos) VALUES ('fork-card', 'forkca', 1, 'c', 'task', 0, 0, '2026-11-13', '2026-11-13', '{\"kind\":\"video\",\"dir\":\"/private-tour\",\"chapters\":[]}', '[]')");
+    if (projectFolder) db.run("UPDATE cards SET work_place = 'project-folder' WHERE id = 'fork-card'");
+    db.close();
+    const current = new Store(path);
+    expect(current.card('fork-card')).toMatchObject({ code_video: expect.stringContaining('/private-tour'), code_videos: '[]', work_place: projectFolder ? 'project-folder' : null, resumes: null, upstream: null, adopted: null });
+    expect(current.db.query('SELECT joined, stopped FROM talk').all()).toEqual([]);
+    current.db.close();
+    const reopened = new Store(path);
+    expect(reopened.card('fork-card')!.code_video).toContain('/private-tour');
+    reopened.db.close();
+  }));

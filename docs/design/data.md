@@ -57,3 +57,5 @@ to the home, `sites/demos/deploy.env`, say), and `share/`, the directory deploys
 
 Derived, not stored: git, PR and CI state (read from git and GitHub), plan-doc content (read from
 the repository; the copy on the project is only for the archive).
+
+The fork’s historical schema versions 86 and 87 contain private code videos and, at 87, project-folder run locations. Opening one upgrades it atomically to the upstream migration order while preserving those fields. The same version numbers from upstream follow their ordinary migrations.
