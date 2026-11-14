@@ -42,6 +42,7 @@
   let dim = null;
   let stage = null;
   let veil = null;
+  let showPointer = true;
   let pointer = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 
   function ensureRoot() {
@@ -55,6 +56,7 @@
       'position:absolute;left:0;top:0;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));' +
       'transition:transform 700ms cubic-bezier(.45,0,.2,1);will-change:transform;';
     cursor.style.transform = `translate(${pointer.x}px,${pointer.y}px)`;
+    cursor.hidden = !showPointer;
     root.appendChild(cursor);
     document.documentElement.appendChild(root);
     requestAnimationFrame(track);
@@ -220,6 +222,10 @@
 
   window.__demo = {
     hidden,
+    pointer(visible) {
+      showPointer = visible;
+      if (cursor) cursor.hidden = !visible;
+    },
     moveTo(x, y, instant = false) {
       ensureRoot();
       pointer = { x, y };

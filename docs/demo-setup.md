@@ -81,6 +81,41 @@ there). Its settings are `demo.json` in `~/.obeya` (or `OBEYA_HOME`), the direct
 among them (`directory`, else `~/demos`); `node plugin/skills/demo/lib/settings.ts` prints what
 applies.
 
+## Code videos without an app
+
+The demo skill also has a [code-video recipe](../plugin/skills/demo/code-video.md): a design-level
+tour of a git change, with structure, boundaries, patterns and a few evidence excerpts. It uses
+the same browser, voice, captions and chapters as a behaviour demo, plus Git to read source at
+explicit base and head commits. No app, database, login or Obeya server is needed.
+
+The [runnable example](../plugin/skills/demo/example/code-video.ts) creates a temporary repository
+with two commits and its own design guide. It leaves the caller's checkout alone, removes the
+temporary repository after the take, and writes the video and report under the configured demo
+directory in `code-video-example`. Run from the Obeya checkout, with English narration for this
+English example (on PowerShell, set `$env:DEMO_LANGUAGE = 'en'` before the `node` commands):
+
+```sh
+DEMO_LANGUAGE=en node plugin/skills/demo/example/code-video.ts --dry
+DEMO_LANGUAGE=en node plugin/skills/demo/example/code-video.ts
+```
+
+`--out <absolute-directory>` chooses a different output directory. `DEMO_VOICE=none` makes a
+caption-only version without a voice installation; otherwise the configured voice applies.
+The result contains `demo.mp4`, `captions.vtt`, `captions.en.vtt`, `chapters.vtt`, review stills
+and `index.html`. Open the report page to watch it; for caption playback, serve the output
+directory over localhost if the browser blocks subtitle files opened from disk. It is a model
+for an authored tour, not an automatic diagram generator for an arbitrary repository.
+
+For a real change, copy the example to a separate demo directory, use absolute skill imports,
+replace its fixture with `serveChangeView({ repo, base, head })`, and write the views from the
+subject repository's prose and source. A single-commit tour uses its parent and that commit;
+a branch tour uses its merge base with the target and its head. A supplied `BASE..HEAD` uses
+those endpoints. The [API reference](../plugin/skills/demo/change-view.md) explains ranges and
+lighting. Use a separate output directory from the behaviour demo. Run `--dry`, then render,
+then watch the whole video at the card's player size and enlarged to check readability, complete
+narration, lighting and evidence. The app-based `example/demo.ts` recipe remains the model for
+normal behaviour demos.
+
 ## Not tried yet
 
 Recording was checked on macOS (Apple Silicon), Ubuntu x64, Linux on ARM (in Docker) and Windows
