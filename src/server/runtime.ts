@@ -12,7 +12,7 @@ import { filesIn } from './files';
 import { OWN_GROUP } from './spawn';
 import type { Messages } from '../core/messages';
 import type { ToolWatch } from './folder';
-import { agentDefault, type AgentEffort, type AgentRole, type AgentSetting, type CardAgent, type Harness, storedModel } from '../core/agents';
+import { agentDefault, type AgentSpeed, type AgentEffort, type AgentRole, type AgentSetting, type CardAgent, type Harness, storedModel } from '../core/agents';
 import { messageOf } from '../core/text';
 import { claudeLoginFailed, codexLoginLost } from '../core/login';
 
@@ -117,6 +117,8 @@ export interface AgentSpec {
   env?: Record<string, string>;
   /** How much the model thinks; low for quick, small jobs. */
   effort?: AgentEffort;
+  /** Codex's processing speed; absent is normal. */
+  speed?: AgentSpeed;
   /** The model, when not the default: a smaller one for small, frequent jobs; for Codex a family, its newest model on the machine the agent runs on. */
   model?: string;
   /** The group the agent belongs to, whose harness, model and effort the owner chooses (`withAgentSetting`). */
@@ -175,7 +177,7 @@ export const sessionHarness = (session: string): Harness => (session.startsWith(
 
 /**
  * A runtime that starts each agent of a group on its group's harness, model and effort
- * (`agentSetting`), asked at every start, or on the harness and model and the effort chosen for that
+ * (`agentSetting`), asked at every start, or on the harness, model, effort and speed chosen for that
  * agent alone (a card's), each where it names one. Claude Code's default model is no model given;
  * a Codex agent always gets a family (`codexFamily`), which its session resolves to a model. A session
  * resumed stays on the harness it began on, with that harness's preset model if the choice has
@@ -190,9 +192,10 @@ export function withAgentSetting(runtime: AgentRuntime, setting: (role: AgentRol
       const chosen: AgentSetting = { ...group, ...(own?.harness && own.model ? { harness: own.harness, model: own.model } : {}), ...(own?.effort ? { effort: own.effort } : {}) };
       const on: Harness = spec.resume ? sessionHarness(spec.resume) : chosen.harness;
       const { harness, model, effort } = on === chosen.harness ? chosen : { ...agentDefault(spec.role, on), effort: chosen.effort };
-      const { model: _, agent: __, ...rest } = spec;
+      const speed = own?.speed ?? (on === chosen.harness ? chosen.speed : undefined);
+      const { model: _, agent: __, speed: ___, ...rest } = spec;
       const given = storedModel(harness, model);
-      return runtime.start({ ...rest, harness, effort, ...(given === 'default' ? {} : { model: given }) }, firstMessage, images);
+      return runtime.start({ ...rest, harness, effort, ...(given === 'default' ? {} : { model: given }), ...(harness === 'codex' && speed ? { speed } : {}) }, firstMessage, images);
     },
   };
 }

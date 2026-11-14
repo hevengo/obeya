@@ -315,7 +315,7 @@ export interface Item {
    * the owner has costs shown (`CostsView`).
    */
   spent?: number;
-  /** The harness, model and effort the owner chose for this card's agent, over its group's (`CardAgent`); absent: the group's. */
+  /** The harness, model, effort and speed the owner chose for this card's agent, over its group's (`CardAgent`); absent: the group's. */
   agent?: CardAgent;
   /** Waiting for approval, its branch holds no change (checked at the handover): approving makes the card `done`, unless it follows pull requests (`followsPrs`). */
   noChange?: boolean;

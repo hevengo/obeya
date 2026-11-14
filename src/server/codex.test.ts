@@ -48,6 +48,25 @@ function start(o: Partial<AgentSpec> = {}, first?: string) {
 }
 
 describe.skipIf(process.platform === 'win32')('a Codex session through the app server', () => {
+  test.each([
+    [undefined, 'default'],
+    ['normal', 'default'],
+    ['fast', 'priority'],
+    ['ultrafast', 'ultrafast'],
+  ] as const)('speed %s explicitly sets the service tier %s on new and resumed threads', async (speed, tier) => {
+    for (const resume of [undefined, 'codex:thread-1']) {
+      const s = start({ speed, resume }, 'hello');
+      await until(() => s.idles() === 1);
+      const method = resume ? 'thread/resume' : 'thread/start';
+      expect(s.requests().find((r) => r.method === method)!.params.serviceTier).toBe(tier);
+      s.session.send('another turn');
+      await until(() => s.idles() === 2);
+      // later turns inherit the explicit tier rather than Codex's configuration or the old thread's
+      expect(s.requests().filter((r) => r.method === 'turn/start')).toHaveLength(2);
+      expect(s.requests().filter((r) => r.method === 'turn/start').every((r) => r.params.serviceTier === undefined)).toBe(true);
+    }
+  });
+
   test('starts or resumes its thread only once Codex has listed its remote plugins, whose skills join its list then', async () => {
     const s = start({ env: { FAKE_CODEX_PLUGINS_MS: '300' } }, 'hello');
     await until(() => s.idles() === 1);

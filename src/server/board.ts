@@ -15,7 +15,7 @@ import { MESSAGES, type Messages, snoozeTerm } from '../core/messages';
 import { allTicked, type OtherDoc, type PlanDoc, type Workstream } from '../core/plan-doc';
 import { type CanvasInfo, type CanvasSnapshot, type CardEvent, type CardPatch, type ClonePool, type Decision, type DemoKind, type ErrorCode, type Group, type Snooze, type Woke, type Item, type NewCard, type NewRepo, type TalkMoved, type PreferenceState, type ProposedSetting, type SettingProposal, type SettingProposalState, type ProjectHistory, type Proposal, type Superseded, type CardState, type Revising, type Question, type PlanDir, type Queue, STATES, type Notice, type WorkerTurn } from '../core/types';
 import { archivedWithDone, archiveRefusal, type ArchiveRefusal, finished, formatQuestion, needsYou, plannedToStart } from '../core/card';
-import { type CardAgent, AGENT_EFFORTS, type AgentEffort, type Harness, HARNESSES, modelFits, storedModel } from '../core/agents';
+import { type CardAgent, AGENT_EFFORTS, AGENT_SPEEDS, type AgentSpeed, type AgentEffort, type Harness, HARNESSES, modelFits, storedModel } from '../core/agents';
 import type { CardRow, DecisionRow, Friction, FrictionNote, GroupRow, NewEvent, NewRow, RowUpdate, Store } from './db';
 import { History } from './history';
 import { Sheet } from './sheet';
@@ -971,7 +971,7 @@ export class Board {
   }
 
   /**
-   * The harness, model and effort the card's agent runs on, over the workers' group's (`null`: the
+   * The harness, model, effort and speed the card's agent runs on, over the workers' group's (`null`: the
    * group's again), for each session of its next run. A session keeps what it started on, so the choice
    * changes only while the card waits to start (planned, or proposed).
    */
@@ -982,16 +982,17 @@ export class Board {
     if (card?.state !== 'planned' && card?.state !== 'proposal') throw new BadRequest('agentStarted', 'the card is at work or done: its agent keeps its harness and model');
     let chosen: CardAgent | null = null;
     if (agent !== null) {
-      const { harness, model, effort, ...other } = (agent && typeof agent === 'object' ? agent : {}) as Record<string, unknown>;
+      const { harness, model, effort, speed, ...other } = (agent && typeof agent === 'object' ? agent : {}) as Record<string, unknown>;
       const both = harness !== undefined || model !== undefined;
       if (
         Object.keys(other).length ||
         (both && (!HARNESSES.some((h) => h === harness) || typeof model !== 'string' || !modelFits(harness as Harness, model))) ||
         (effort !== undefined && !AGENT_EFFORTS.some((e) => e === effort)) ||
-        (!both && effort === undefined)
+        (speed !== undefined && (!AGENT_SPEEDS.some((s) => s === speed) || harness === 'claude')) ||
+        (!both && effort === undefined && speed === undefined)
       )
-        throw new BadRequest('invalid', 'agent must be a harness with a model it takes, an effort, or both');
-      chosen = { ...(both ? { harness: harness as Harness, model: storedModel(harness as Harness, model as string) } : {}), ...(effort !== undefined ? { effort: effort as AgentEffort } : {}) };
+        throw new BadRequest('invalid', 'agent must be a harness with a model it takes, an effort, and/or a Codex speed');
+      chosen = { ...(both ? { harness: harness as Harness, model: storedModel(harness as Harness, model as string) } : {}), ...(effort !== undefined ? { effort: effort as AgentEffort } : {}), ...(speed !== undefined ? { speed: speed as AgentSpeed } : {}) };
     }
     this.store.update(id, { agent: chosen && toJson(chosen) });
     this.changed();

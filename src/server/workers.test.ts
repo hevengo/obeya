@@ -1533,6 +1533,28 @@ describe('workers', () => {
       expect(() => board.chooseAgent(c.id, bad as never)).toThrow('harness');
   });
 
+  test("a card's speed is stored and passed to its later sessions", async () => {
+    const c = manual();
+    for (const speed of ['normal', 'fast', 'ultrafast'] as const) {
+      board.chooseAgent(c.id, { speed });
+      expect(board.item(c.id)!.agent).toEqual({ speed });
+    }
+    board.chooseAgent(c.id, { harness: 'codex', model: 'gpt-6.1-sol', effort: 'low', speed: 'normal' });
+    expect(board.item(c.id)!.agent).toEqual({ harness: 'codex', model: 'gpt-#-sol', effort: 'low', speed: 'normal' });
+    await workers.start(c.id);
+    expect(runtime.last.spec.agent?.speed).toBe('normal');
+    runtime.last.emit({ type: 'session', id: 'codex:thread-speed', model: 'gpt-6.1-sol' });
+    workers.shutdown();
+    workers.message(c.id, 'Continue');
+    expect(runtime.last.spec).toMatchObject({ resume: 'codex:thread-speed', agent: { speed: 'normal' } });
+    expect(() => board.chooseAgent(c.id, { speed: 'fast' })).toThrow('at work');
+    board.work(c.id, { state: 'planned' });
+    for (const bad of [{ speed: 'turbo' }, { speed: null }, { speed: 1 }, { harness: 'claude', model: 'opus', speed: 'fast' }])
+      expect(() => board.chooseAgent(c.id, bad as never)).toThrow('harness');
+    board.chooseAgent(c.id, null);
+    expect(board.item(c.id)!.agent).toBeUndefined();
+  });
+
   test('after a restart a working card resumes its session; a delivery to an ended session resumes it', async () => {
     const c = manual();
     await workers.start(c.id);

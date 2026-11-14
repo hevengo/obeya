@@ -130,13 +130,27 @@ stores its family. Saving restarts nothing; agents starting afterwards take it, 
 running session keeps its own, except the voice commands' session, which reopens when the
 Coordinator's setting changes (as for another language).
 
-A card may run on another harness, model or effort than its group. Joined to each button that
-starts a card (and "Accept and start" on a proposed task, "Start anyway" in the queue) is a narrow
-part with a triangle that opens a menu: each ready harness's models, as "Agents and models" lists
-them, and the efforts the model takes, with what applies checked (the workers' setting until the
-card has one of its own). Picking what the workers have is no choice of the card's: it follows
-their setting. What the card chose of its own stands small beside the button ("Codex · Sol ·
-effort very high"); without a choice nothing does. The choice is the card's, stored with it, and
+Each group on Codex also has a "Speed" selector: Normal (the preset), Fast and Ultrafast, independent
+of its model and effort. Faster modes depend on the model and the owner's plan. The choice is saved
+with the group as `speed` in `settings.json` (`normal`, `fast`, `ultrafast`; Normal is omitted), and
+applies to sessions that start or resume afterwards. A session already running keeps its speed.
+Switching a group to Claude Code clears its speed choice. Codex receives an explicit service tier
+on both thread start and resume: `default` for Normal, `priority` for Fast, `ultrafast` for Ultrafast,
+so Normal overrides a faster tier in Codex's own configuration or a resumed thread. The same tier
+applies to subsequent turns, including on a host. A card takes the group's speed unless it has its
+own; a Codex session whose group now runs on Claude Code resumes at Normal speed unless the card
+has an explicit speed choice.
+
+A card may run on another harness, model, effort or Codex speed than its group. Joined to each
+button that starts a card (and "Accept and start" on a proposed task, "Start anyway" in the queue)
+is a narrow part with a triangle that opens a menu: each ready harness's models, as "Agents and
+models" lists them, the efforts the model takes, and Normal, Fast and Ultrafast when Codex is
+selected, with what applies checked (the workers' setting until the card has one of its own).
+Picking what the workers have is no choice of the card's: it follows their setting. What the card
+chose of its own stands small beside the button ("Codex · Sol ·
+effort very high · speed Fast"); without a choice nothing does. Speed is independent of model and
+effort; changing either keeps it, while choosing Claude Code clears it. An explicit Normal speed
+overrides a faster group setting. The choice is the card's, stored with it, and
 goes with every session of its next run, the ones resumed after a restart included, and with the
 instructions that differ by harness (how a worker waits); what it leaves out is the workers'. It
 changes only while the card waits to start (planned, proposed, in the queue); once it is at work the

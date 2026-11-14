@@ -1,4 +1,4 @@
-// The harness, model and effort a card's agent runs on, chosen beside the button that starts it: the
+// The harness, model, effort and speed a card's agent runs on, chosen beside the button that starts it: the
 // workers' group's until the owner picks another for this card, which then goes with every session
 // of its run. Rarely wanted, so the start button only gets a narrow part with a triangle that opens
 // the menu; a choice of the card's own is named beside it. One component for every button that
@@ -7,7 +7,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { CardAction, Item } from '../core/types';
-import { AGENT_EFFORTS, type AgentEffort, type AgentModel, type AgentsView, type HarnessUpdate as HarnessUpdateState, type CardAgent, type Harness, HARNESSES, modelChoices, type ModelChoice, modelName } from '../core/agents';
+import { AGENT_EFFORTS, AGENT_SPEEDS, type AgentSpeed, type AgentEffort, type AgentModel, type AgentsView, type HarnessUpdate as HarnessUpdateState, type CardAgent, type Harness, HARNESSES, modelChoices, type ModelChoice, modelName } from '../core/agents';
 import { useMenuClose, usePlaced } from './menu';
 import { api } from './api';
 import { usePoll } from './act';
@@ -31,11 +31,11 @@ export function agentLabel(view: AgentsView | null, harness: Harness, model: str
 }
 
 /** The card's choice without what is empty; nothing left: the group's again. */
-const choice = (c: CardAgent): CardAgent | null => (c.harness || c.effort ? c : null);
+const choice = (c: CardAgent): CardAgent | null => (c.harness || c.effort || c.speed ? c : null);
 
 /**
  * The button that starts the card (`children`), joined to a narrow part with a triangle that opens
- * the menu of harnesses, models and efforts, in the start button's colours (`primary`); a choice of
+ * the menu of harnesses, models, efforts and Codex speeds, in the start button's colours (`primary`); a choice of
  * the card's own is named beside them. Where the harnesses are not known (yet), the start button alone.
  */
 export function AgentPick({ item, act, primary = true, children }: { item: Item; act: (a: CardAction) => Promise<void>; primary?: boolean; children: ReactNode }) {
@@ -78,11 +78,13 @@ export function AgentPick({ item, act, primary = true, children }: { item: Item;
     const mine = h !== group.harness || m !== group.model;
     // an effort the new model does not take goes back to the group's
     const kept = own.effort && effortsOf(choices(h), m).includes(own.effort) ? own.effort : undefined;
-    save(choice({ ...(mine ? { harness: h, model: m } : {}), ...(kept ? { effort: kept } : {}) }));
+    save(choice({ ...(mine ? { harness: h, model: m } : {}), ...(kept ? { effort: kept } : {}), ...(h === 'codex' && own.speed ? { speed: own.speed } : {}) }));
   };
-  const pickEffort = (e: AgentEffort) => save(choice({ ...mine, ...(e !== group.effort ? { effort: e } : {}) }));
+  const pickEffort = (e: AgentEffort) => save(choice({ ...own, effort: e !== group.effort ? e : undefined }));
+  const pickSpeed = (s: AgentSpeed) => save(choice({ ...own, speed: s !== (group.speed ?? 'normal') ? s : undefined }));
+  const speed = own.speed ?? group.speed ?? 'normal';
   const effort = own.effort ?? group.effort;
-  const chosen = [mine ? agentLabel(view, mine.harness, mine.model) : '', own.effort ? p.chosenEffort(efforts[own.effort]) : ''].filter(Boolean).join(' · ');
+  const chosen = [mine ? agentLabel(view, mine.harness, mine.model) : '', own.effort ? p.chosenEffort(efforts[own.effort]) : '', harness === 'codex' && own.speed ? p.chosenSpeed(t.config.agents.speeds[own.speed]) : ''].filter(Boolean).join(' · ');
   return (
     <span className={saving ? 'agent-split saving' : 'agent-split'} ref={box}>
       {children}
@@ -142,6 +144,18 @@ export function AgentPick({ item, act, primary = true, children }: { item: Item;
                 </button>
               ))}
             </div>
+            {harness === 'codex' && (
+              <>
+                <div className="snooze-h agent-h agent-effort-h">{t.config.agents.speed}</div>
+                <div className="agent-efforts" role="group" aria-label={t.config.agents.speed} title={t.config.agents.speedHint}>
+                  {AGENT_SPEEDS.map((s) => (
+                    <button key={s} className={speed === s ? 'agent-effort on' : 'agent-effort'} role="menuitemradio" aria-checked={speed === s} onClick={() => pickSpeed(s)}>
+                      {t.config.agents.speeds[s]}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>,
           document.body,
         )}

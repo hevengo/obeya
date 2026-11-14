@@ -5,7 +5,7 @@
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { type DemoSettings, type DemoSettingsView, type DemoSpaceView, type DemoVoiceCheck, type Language, type NarrationLanguage, type PageTags, type SetupCheck, type Theme, THEMES, type VoiceKind, type VoiceSetupView } from '../core/types';
-import { AGENT_ROLES, type AgentEffort, type AgentRole, type AgentSetting, type Harness, HARNESSES, modelChoices } from '../core/agents';
+import { AGENT_ROLES, AGENT_SPEEDS, type AgentSpeed, type AgentEffort, type AgentRole, type AgentSetting, type Harness, HARNESSES, modelChoices } from '../core/agents';
 import { blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSite, type PersonalSiteView, type SiteSetupJob, type TagProposalJob, type HostConfig, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, START_FAILED } from '../core/config';
 import { lineDiff } from '../core/diff';
 import { parseTagLines, tagLines } from '../core/page-tags';
@@ -837,6 +837,7 @@ function AgentsBlock({ on }: { on: boolean }) {
         <span className="hint">{a.harness}</span>
         <span className="hint">{a.model}</span>
         <span className="hint">{a.effort}</span>
+        <span className="hint">{a.speed}</span>
         {AGENT_ROLES.map((role) => {
           const setting = view.agents[role];
           // Codex's families by their newest model; a model chosen that the harness no longer offers stays shown
@@ -872,10 +873,18 @@ function AgentsBlock({ on }: { on: boolean }) {
                   </option>
                 ))}
               </select>
+              {setting.harness === 'codex' ? (
+                <select aria-label={`${a.roles[role].name}: ${a.speed}`} value={setting.speed ?? 'normal'} disabled={busy} onChange={(e) => choose(role, { speed: e.target.value as AgentSpeed })}>
+                  {AGENT_SPEEDS.map((speed) => (
+                    <option key={speed} value={speed}>{a.speeds[speed]}</option>
+                  ))}
+                </select>
+              ) : <span className="hint cfg-agent-no-speed" aria-label={a.codexOnly}>—</span>}
             </Fragment>
           );
         })}
       </div>
+      <p className="hint">{a.speedHint}</p>
       {HARNESSES.map((h) => (
         <HarnessUpdate key={h} harness={h} view={view} onView={setView} />
       ))}
