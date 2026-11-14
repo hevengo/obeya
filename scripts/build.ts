@@ -39,6 +39,13 @@ function fail(msg: string): never {
   process.exit(1);
 }
 
+// Bun before 1.3.11 compiles the page with its script and styles under relative paths (`./chunk-….js`),
+// which a canvas's address (`/c/<canvas>`) resolves beside itself: every load there but the first
+// at `/` stays blank, in the app's window too. Run from the checkout, the page is not affected.
+const MIN_BUN = '1.3.11';
+if (Bun.semver.order(Bun.version, MIN_BUN) < 0)
+  fail(`Bun ${Bun.version} is too old to build Obeya: the page it compiles stays blank at a canvas's address. Build with Bun ${MIN_BUN} or later (\`bun upgrade\`).`);
+
 function run(cmd: string[], cwd = ROOT) {
   const r = Bun.spawnSync(cmd, { cwd, stdout: 'pipe', stderr: 'pipe' });
   if (r.exitCode !== 0) fail(`${cmd.join(' ')}\n${r.stdout.toString()}${r.stderr.toString()}`);
