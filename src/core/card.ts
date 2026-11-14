@@ -13,7 +13,7 @@ export const finished = (s: CardState) => s === 'live' || s === 'done';
  */
 export const landedWork = (i: Pick<Item, 'state' | 'onMain'>) => finished(i.state) || !!i.onMain;
 /** A card an agent worked on until the owner stopped it: planned again, its branch stays the card's. */
-export const stopped = (i: Pick<Item, 'state' | 'branch' | 'unstarted'>) => i.state === 'planned' && !!i.branch && !i.unstarted;
+export const stopped = (i: Pick<Item, 'state' | 'branch' | 'projectFolder' | 'unstarted'>) => i.state === 'planned' && (!!i.branch || !!i.projectFolder) && !i.unstarted;
 /** A finished card of the owner's whose agent is done: the archive may take it. */
 export const finishedArchivable = (i: Pick<Item, 'state' | 'source' | 'finishing'>) => finished(i.state) && i.source === 'manual' && !i.finishing;
 /** Why the archive does not take a card (`archiveRefusal`), as the server's refusal names it. */
@@ -27,7 +27,7 @@ export type ArchiveRefusal = 'notDone' | 'holdsWork' | 'prototypeRunning' | 'pla
  * anyway. A workstream stays with its project.
  */
 export function archiveRefusal(
-  i: Pick<Item, 'kind' | 'state' | 'source' | 'idea' | 'prototypes' | 'branch' | 'unstarted' | 'prototypeOf' | 'queue' | 'workspace' | 'keptIn' | 'repoDown' | 'finishing'>,
+  i: Pick<Item, 'kind' | 'state' | 'source' | 'idea' | 'prototypes' | 'branch' | 'projectFolder' | 'unstarted' | 'prototypeOf' | 'queue' | 'workspace' | 'keptIn' | 'repoDown' | 'finishing'>,
 ): ArchiveRefusal | undefined {
   if (i.kind === 'project') return i.state === 'done' ? undefined : 'notDone';
   if (i.source === 'plan') return 'planCard';
@@ -64,8 +64,8 @@ export const halted = (i: Pick<Item, 'paused' | 'pausing' | 'snoozed'>) => (!!i.
  * A finished card an agent worked on, on the canvas, with no agent on it now: what the owner asks
  * about it resumes the agent that did the work, which answers and ends again.
  */
-export const askable = (i: Pick<Item, 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
-  finished(i.state) && !!i.branch && !i.prototypeOf && !i.archivedAt && !i.finishing;
+export const askable = (i: Pick<Item, 'state' | 'branch' | 'projectFolder' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
+  finished(i.state) && (!!i.branch || !!i.projectFolder) && !i.prototypeOf && !i.archivedAt && !i.finishing;
 
 /**
  * How many cards of each group are still to be done: not finished, not archived, not a dropped
@@ -79,7 +79,7 @@ export function openPerGroup(items: Item[]): Map<string, number> {
 }
 
 /** A workstream a prototype can be built for: nobody has worked on it yet, and the Coordinator does not hold it. */
-export const buildableOn = (i: Item) => i.state === 'planned' && !i.branch && !i.queue;
+export const buildableOn = (i: Item) => i.state === 'planned' && !i.branch && !i.projectFolder && !i.queue;
 
 /**
  * A planned task nobody has worked on yet, which the Coordinator may merge with others or delete:
@@ -87,7 +87,7 @@ export const buildableOn = (i: Item) => i.state === 'planned' && !i.branch && !i
  * review's follow-up task waiting for the PR's merge, say), and no prototype nor becoming a project.
  */
 export const untouched = (i: Item) =>
-  i.kind === 'task' && i.source === 'manual' && i.state === 'planned' && !i.branch && !i.workspace && (!i.queue || 'behind' in i.queue) && !i.prototypeOf && !i.becomesProject;
+  i.kind === 'task' && i.source === 'manual' && i.state === 'planned' && !i.branch && !i.projectFolder && !i.workspace && (!i.queue || 'behind' in i.queue) && !i.prototypeOf && !i.becomesProject;
 
 /**
  * A task of the owner's that can still be planned as a project, as an idea can: planned, nobody has
@@ -145,7 +145,7 @@ export const answering = (i: Pick<Item, 'state' | 'need' | 'answering'>) => hand
  * does, the words wait for the rework after it). The words then go straight to it; on any other
  * card they go to the Coordinator.
  */
-export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
+export const agentListens = (i: Pick<Item, 'kind' | 'state' | 'branch' | 'projectFolder' | 'prototypeOf' | 'archivedAt' | 'finishing'>) =>
   !i.archivedAt && (i.kind === 'question' || i.state === 'idea' || i.state === 'proposal' || i.state === 'working' || i.state === 'waiting' || i.state === 'inPr' || !!i.finishing || askable(i));
 
 /**

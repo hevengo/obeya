@@ -27,7 +27,7 @@ import { COMPILED } from './resources';
 import { OWN_GROUP } from './spawn';
 import { BOUNDED_WAITS, FOREGROUND_SLEEP_LIMIT, refuseLongWait, waitRefusal } from './shell';
 import { type AgentRuntime, type AgentSpec, carryTo, claudeUnreachable, cleanEnv, type DeniedBy, lostEvent, outageRetry, stderrTail, trackHere, type TurnLimit, withStderr } from './runtime';
-import type { ToolCall } from './folder';
+import type { ToolCall, ToolWatch } from './folder';
 import { messageOf } from '../core/text';
 import { within } from '../core/late';
 
@@ -110,7 +110,7 @@ export const sdkRuntime: AgentRuntime = {
     const ownTools = spec.tools.map((t) => `mcp__obeya__${t.name}`);
     const claude = there ? 'claude' : claudeExecutable();
     // a watched call's end is waited for before the agent goes on
-    const watched = spec.watch ? [{ hooks: [async (input: HookInput) => (await spec.watch!.after(toolCall(input)), {})] }] : [];
+    const tracking = trackingHooks(spec.watch);
     // what Claude Code here last said on stderr, for a session that ends with an error
     let stderr = '';
     const q = query({
@@ -148,7 +148,7 @@ export const sdkRuntime: AgentRuntime = {
         hooks: {
           PreToolUse: [
             { matcher: 'mcp__obeya__.*', hooks: [async () => ownToolAllowed] },
-            ...(spec.watch ? [{ hooks: [async (input: HookInput) => (await spec.watch!.before(toolCall(input)), {})] }] : []),
+            ...tracking.PreToolUse,
             {
               matcher: 'Bash',
               hooks: [
@@ -163,11 +163,11 @@ export const sdkRuntime: AgentRuntime = {
           ],
           // a subagent's step would pass it to the subagent, which the agent may never hear of
           PostToolUse: [
-            ...watched,
+            ...tracking.PostToolUse,
             { hooks: [async (input) => withContext('PostToolUse', input.agent_id ? undefined : spec.contextUpdate?.())] },
           ],
           PostToolUseFailure: [
-            ...watched,
+            ...tracking.PostToolUseFailure,
             { hooks: [async (input) => withContext('PostToolUseFailure', input.agent_id ? undefined : spec.contextUpdate?.())] },
           ],
         },
@@ -432,6 +432,16 @@ export function refuseForegroundWait(input: HookInput): HookJSONOutput {
   const { command, run_in_background } = (input.tool_input ?? {}) as { command?: unknown; run_in_background?: unknown };
   if (run_in_background || typeof command !== 'string') return {};
   return refuseLongWait(command, WAIT_REFUSED) ?? {};
+}
+
+/** The SDK hooks that bracket actual writes, including a tool that fails after writing. */
+export function trackingHooks(watch?: ToolWatch) {
+  const after = watch ? [{ hooks: [async (input: HookInput) => (await watch.after(toolCall(input)), {})] }] : [];
+  return {
+    PreToolUse: watch ? [{ hooks: [async (input: HookInput) => (await watch.before(toolCall(input)), {})] }] : [],
+    PostToolUse: after,
+    PostToolUseFailure: after,
+  };
 }
 
 /** A tool call as the hooks of `AgentSpec.watch` hear of it. */

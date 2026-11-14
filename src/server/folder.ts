@@ -9,7 +9,7 @@
 // overwrote and of the folder's text files.
 
 import { constants, mkdirSync, realpathSync, statSync, type Stats, writeFileSync } from 'node:fs';
-import { copyFile, lstat, mkdir, open, readdir, rename, rm, rmdir, stat, unlink, utimes } from 'node:fs/promises';
+import { chmod, copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, stat, unlink, utimes, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { CardDiff, DiffFile, FolderChange, FolderChanges } from '../core/diff';
 import { cardDiff } from '../core/diff';
@@ -18,6 +18,7 @@ import { shared } from '../core/one-at-a-time';
 import { messageOf } from '../core/text';
 import type { Store } from './db';
 import { spawnOutput } from './spawn';
+import { observeOwnWrites } from './own-writes';
 import { writesNothing } from './shell';
 import { type CardWorkspaces, type Change, type FileAt, ownFile, type LandProblem, type Landed, type Lease } from './workspaces';
 import { GIT, WorkspaceError } from './git';
@@ -34,6 +35,9 @@ export interface Entry {
   cloud?: true;
   /** Of its contents, where Obeya read them: of what a card changed, to tell later whether someone changed it again. */
   hash?: string;
+  /** Exact post-landing contents, when a concurrent edit already replaced them on disk. */
+  gitBlob?: string;
+  gitMode?: number;
 }
 
 /** The folder's files and directories by their path relative to it (with `/`); `''` is the folder. */
@@ -97,6 +101,26 @@ export async function walk(root: string): Promise<Manifest> {
       }),
     );
   }
+  return out;
+}
+
+/** Git enumerates tracked and visible untracked files without walking ignored trees. */
+export async function walkGit(root: string): Promise<Manifest> {
+  const result = await spawnOutput([GIT, '-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard']);
+  if (result.code !== 0) throw new WorkspaceError(result.stderr);
+  const out: Manifest = new Map();
+  const top = await entryAt(root);
+  if (top) out.set('', top);
+  await inBatches([...new Set(result.stdout.split('\0').filter(Boolean))], 64, async (path) => {
+    if (path.split('/').some(skipped)) return;
+    const entry = await entryAt(join(root, path));
+    if (entry && !entry.dir) out.set(path, entry);
+    // Parent timestamps establish when deletions happened; directories themselves aren't results.
+    for (const parent of ancestors(path)) if (parent && !out.has(parent)) {
+      const e = await entryAt(join(root, parent));
+      if (e) out.set(parent, e);
+    }
+  });
   return out;
 }
 
@@ -257,6 +281,8 @@ interface Tracked {
   was?: string;
   /** Another card's call ran when it changed too: whose change it was cannot be told, so undo leaves it. */
   shared?: true;
+  /** Replaced by an Obeya write: never restore this earlier version over it. */
+  superseded?: true;
   before?: Entry;
   after?: Entry;
 }
@@ -305,11 +331,17 @@ export function mergeOwn(rec: FolderCard, c: RawChange, shared = false) {
 /** Folds a change into a card's list: one entry per thing it changed, from before its first change to after its last. */
 export function merge(list: Tracked[], c: RawChange, shared = false) {
   const before = list.length;
+  const overlaps = (t: Tracked) => at(c, t.path) || (t.from !== undefined && at(c, t.from));
+  const guarded = list.some((t) => t.shared && overlaps(t));
+  const superseded = list.some((t) => t.superseded && overlaps(t));
   mergeOne(list, c);
   // whatever entry the change went into is no longer this card's alone
-  if (shared) {
+  if (shared || guarded || superseded) {
     const t = list.find((x) => x.path === c.path && !!x.dir === !!c.dir) ?? (list.length > before ? list.at(-1) : undefined);
-    if (t) t.shared = true;
+    if (t) {
+      if (shared || guarded) t.shared = true;
+      if (superseded) t.superseded = true;
+    }
   }
 }
 
@@ -436,6 +468,8 @@ export interface FolderOptions {
   onChange?: (cardId: string) => void;
   /** `false`: the partial undo even where the file system clones. */
   clone?: false;
+  /** Track git-visible files, with ignored files only through direct edits. */
+  git?: true;
 }
 
 /**
@@ -448,8 +482,12 @@ export class FolderWorkspaces implements CardWorkspaces {
   /** The folder with its links resolved: what the manifest is of. */
   private root: string;
   private last: Manifest = new Map();
-  private baseline: Promise<void>;
+  private baselineRead?: Promise<void>;
+  private get baseline(): Promise<void> {
+    return this.baselineRead ??= this.manifest().then((m) => void (this.last = m));
+  }
   private windows: Window[] = [];
+  private watchEpoch = new Map<string, number>();
   private chain: Promise<unknown> = Promise.resolve();
   /** A reading of the whole folder that has not started yet: later calls that ended share it. */
   private pending: { started: boolean; done: Promise<void> } | null = null;
@@ -459,6 +497,68 @@ export class FolderWorkspaces implements CardWorkspaces {
   private undoing = new Map<string, Promise<UndoReport>>();
   /** What an undo put back, until the folder is read after it: those changes are no card's. */
   private quiet = new Set<string>();
+  private direct = new Set<string>();
+  private ignoredDirect = new Set<string>();
+  private unobserve?: () => void;
+
+  dispose() { this.unobserve?.(); }
+
+  private observeWrites() {
+    if (this.o.git && !this.unobserve) this.unobserve = observeOwnWrites(this.root, (args, run) => this.ownGit(args, run));
+  }
+
+  private manifest() { return this.o.git ? walkGit(this.root) : walk(this.root); }
+
+  /** Own git writes establish a new baseline, even when a worker already changed that file
+   * again. Its immutable blob keeps undo from restoring the pre-landing version. */
+  private ownGit<T>(args: string[], run: () => Promise<T>): Promise<T> {
+    return this.serial(async () => {
+      await this.scanNow();
+      const git = (args: string[]) => spawnOutput([GIT, '-C', this.root, ...args]);
+      const before = (await git(['rev-parse', 'HEAD'])).stdout.trim();
+      try { return await run(); }
+      finally {
+        const after = (await git(['rev-parse', 'HEAD'])).stdout.trim();
+        const named = args.includes('--') ? args.slice(args.indexOf('--') + 1) : [];
+        const diff = before && after ? await git(['diff', '--name-only', '--no-renames', '-z', before, after]) : null;
+        const paths = new Set([...named, ...(diff?.stdout.split('\0').filter(Boolean) ?? [])]);
+        const records = this.store.folderCardIds(this.root).map((id) => ({ id, rec: this.rec(id) }));
+        for (const path of paths) {
+          const tree = await git(['ls-tree', '-z', 'HEAD', '--', `:(literal)${path}`]);
+          if (tree.code !== 0) continue;
+          const tracked = /^(\d+) blob ([a-f0-9]+)\t/.exec(tree.stdout);
+          const blob = tracked?.[2];
+          if (tree.stdout && !blob) continue; // submodules and directories aren't file snapshots
+          // An earlier task's version was superseded by this write. It may remain in that
+          // task's list, but cannot be restored over a landing (even if its bytes recur).
+          for (const { id, rec } of records) {
+            if (!rec) continue;
+            let changed = false;
+            for (const t of rec.changes) if (t.path === path || t.from === path) {
+              t.superseded = true;
+              changed = true;
+            }
+            if (changed) this.save(id, rec);
+          }
+          if (!blob) {
+            // A recreated untracked file is not "clean" merely because git diff ignores it.
+            this.last.delete(path);
+            continue;
+          }
+          const observed = await entryAt(join(this.root, path));
+          const clean = await git(['diff', '--quiet', '--no-ext-diff', '--no-textconv', 'HEAD', '--', `:(literal)${path}`]);
+          const e = await entryAt(join(this.root, path));
+          if (clean.code === 0 && e && observed?.ctime === e.ctime && observed?.ino === e.ino && observed?.size === e.size && observed?.mtime === e.mtime) {
+            this.last.set(path, e);
+          } else {
+            const size = await git(['cat-file', '-s', blob]);
+            if (size.code !== 0) continue;
+            this.last.set(path, { size: Number(size.stdout.trim()), mtime: -1, ctime: -1, ino: 0, gitBlob: blob, gitMode: parseInt(tracked![1]!, 8) & 0o777 });
+          }
+        }
+      }
+    });
+  }
 
   constructor(
     private store: Store,
@@ -469,7 +569,6 @@ export class FolderWorkspaces implements CardWorkspaces {
     } catch {
       this.root = resolve(o.path);
     }
-    this.baseline = walk(this.root).then((m) => void (this.last = m));
   }
 
   get dir() {
@@ -518,6 +617,7 @@ export class FolderWorkspaces implements CardWorkspaces {
 
   /** The folder itself, for any number of cards at once; the card's undo is made ready meanwhile. */
   lease(cardId: string): Lease {
+    this.observeWrites();
     const rec = this.rec(cardId) ?? { undo: null, changes: [] };
     this.save(cardId, { ...rec, held: true });
     if (!rec.done) void this.prepare(cardId);
@@ -632,8 +732,8 @@ export class FolderWorkspaces implements CardWorkspaces {
   }
 
   /** The files the card changed in the folder as they are now: neither deleted nor a directory. */
-  async changedFiles(cardId: string): Promise<string[]> {
-    return (this.rec(cardId)?.changes ?? []).filter((t) => t.kind !== 'deleted' && !t.dir).map((t) => t.path);
+  async changedFiles(cardId: string, _landed?: { base: string; commit: string }, includeDeleted = false): Promise<string[]> {
+    return [...new Set((this.rec(cardId)?.changes ?? []).filter((t) => !t.dir && (includeDeleted || t.kind !== 'deleted')).flatMap((t) => includeDeleted && t.from ? [t.from, t.path] : [t.path]))];
   }
 
   /** A file in the folder, for a card that changed something there; a link is none. */
@@ -658,9 +758,11 @@ export class FolderWorkspaces implements CardWorkspaces {
 
   /** The hooks around the card's tool calls (`AgentSpec.watch`). */
   watch(cardId: string): ToolWatch {
+    this.observeWrites();
+    const epoch = this.watchEpoch.get(cardId) ?? 0;
     return {
       before: async (call) => {
-        if (!writes(call.name)) return;
+        if (!writes(call.name) || epoch !== (this.watchEpoch.get(cardId) ?? 0)) return;
         await this.baseline;
         const rec = this.rec(cardId);
         if (!rec) return;
@@ -671,12 +773,17 @@ export class FolderWorkspaces implements CardWorkspaces {
           const file = this.inside(call.input[field]);
           only = new Set(file ? [file, ...ancestors(file)] : []);
           // what is there before it writes (a file the owner just made, say) is not the call's change
-          if (file) await this.scan([...only]);
+          if (file) {
+            this.direct.add(file);
+            if (this.o.git && (await spawnOutput([GIT, '-C', this.root, 'check-ignore', '--quiet', '--', file])).code === 0) this.ignoredDirect.add(file);
+            await this.scan([...only]);
+          }
           if (file && !rec.done) await this.keepBefore(cardId, file);
         }
         // nor is what changed since the folder was last read, before a call that may write anywhere
         else await this.scanAll();
         const reads = !field && call.name === 'Bash' && typeof call.input.command === 'string' && writesNothing(call.input.command);
+        if (epoch !== (this.watchEpoch.get(cardId) ?? 0)) return;
         this.windows.push({ card: cardId, id: call.id, start: this.clock(), ...(only ? { only } : {}), ...(reads ? { reads: true as const } : {}) });
       },
       after: async (call) => {
@@ -724,6 +831,13 @@ export class FolderWorkspaces implements CardWorkspaces {
     return Promise.all(this.windows.filter((x) => x.card === cardId && x.end === undefined && x.id !== 'background').map((w) => this.close(w))).then(() => {});
   }
 
+  /** A session stopped: close background windows too, and cancel pre-hooks still preparing. */
+  stop(cardId: string): Promise<void> {
+    this.watchEpoch.set(cardId, (this.watchEpoch.get(cardId) ?? 0) + 1);
+    const closing = this.windows.filter((w) => w.card === cardId && w.end === undefined).map((w) => this.close(w));
+    return Promise.all([...closing, this.ready.get(cardId)]).then(() => this.chain).then(() => {});
+  }
+
   /** Ends a window: once the folder is read after it, its changes are the card's, and it goes. */
   private async close(w: Window) {
     w.end = Date.now();
@@ -749,7 +863,7 @@ export class FolderWorkspaces implements CardWorkspaces {
     }
     for (const base of [this.root, resolve(this.o.path)]) {
       const rel = relative(base, abs);
-      if (rel && !rel.startsWith('..') && !isAbsolute(rel)) return rel.split(sep).join('/');
+      if (rel && !rel.startsWith('..') && !isAbsolute(rel) && !rel.split(sep).some(skipped)) return rel.split(sep).join('/');
     }
     return null;
   }
@@ -788,11 +902,16 @@ export class FolderWorkspaces implements CardWorkspaces {
         if (e) next.set(p, e);
         else next.delete(p);
       }
-    } else next = await walk(this.root);
+    } else {
+      next = await this.manifest();
+      // An ignored direct edit is observed only by editing tools, never by later script output.
+      if (this.o.git) for (const path of this.direct) if (!next.has(path) && last.has(path)) next.set(path, last.get(path)!);
+    }
     const raw = compare(last, next, paths);
     this.last = next;
     const touched = new Set<string>();
     for (const c of raw) {
+      if (this.o.git && c.dir) continue;
       const { cards, uncertain } = this.cardsFor(c);
       if (!cards.length) continue;
       // what a card changed is hashed, to tell later whether someone changed it again
@@ -819,6 +938,7 @@ export class FolderWorkspaces implements CardWorkspaces {
     if (this.quiet.has(c.path) || (c.from !== undefined && this.quiet.has(c.from))) return { cards: [], uncertain: false };
     const during = this.windows.filter(inside);
     const claims = during.filter((w) => w.only && (w.only.has(c.path) || (c.from !== undefined && w.only.has(c.from))));
+    if (this.o.git && (this.ignoredDirect.has(c.path) || (c.from && this.ignoredDirect.has(c.from))) && !claims.length) return { cards: [], uncertain: false };
     const broad = during.filter((w) => !w.only);
     const writing = broad.filter((w) => !w.reads);
     const by = claims.length ? claims : writing.length ? writing : broad;
@@ -841,6 +961,7 @@ export class FolderWorkspaces implements CardWorkspaces {
     await this.baseline;
     const rec = this.rec(cardId);
     if (!rec || rec.done || rec.undo) return;
+    await this.scanAll();
     const base = this.undoDir(cardId);
     await rm(base, { recursive: true, force: true });
     await mkdir(base, { recursive: true });
@@ -858,6 +979,7 @@ export class FolderWorkspaces implements CardWorkspaces {
         // gone meanwhile, or not readable: no copy of it
       }
     });
+    if (this.o.git) await writeFile(join(base, 'snapshot-state.json'), JSON.stringify(Object.fromEntries(entries)));
     const now = this.rec(cardId);
     if (now && !now.done) this.save(cardId, { ...now, undo: full ? 'full' : 'partial' });
   }
@@ -871,19 +993,57 @@ export class FolderWorkspaces implements CardWorkspaces {
     if (!e || e.dir || e.cloud || e.size > HASH_MAX) return;
     try {
       await copyKeeping(src, join(this.undoDir(cardId), 'before', file));
+      if (this.o.git) {
+        const meta = join(this.undoDir(cardId), 'before-state', file);
+        await mkdir(join(meta, '..'), { recursive: true });
+        await writeFile(meta, JSON.stringify(e));
+      }
     } catch (err) {
       console.error(`copying ${file} before it is written:`, messageOf(err));
     }
   }
 
+  private copyingBlobs = new Map<string, Promise<string | null>>();
+
+  /** Materialize immutable git contents outside the checkout; never use its pre-task snapshot
+   * for a file whose baseline an Obeya landing replaced. */
+  private blobCopy(cardId: string, blob: string, size: number, mode = 0o644): Promise<string | null> {
+    if (size > HASH_MAX) return Promise.resolve(null);
+    const copy = join(this.undoDir(cardId), 'objects', `${blob}-${mode}`);
+    const pending = this.copyingBlobs.get(copy);
+    if (pending) return pending;
+    const making = (async () => {
+      if ((await entryAt(copy))?.size === size) return copy;
+      await mkdir(join(copy, '..'), { recursive: true });
+      const temp = `${copy}.${Math.random().toString(36).slice(2)}.tmp`;
+      try {
+        const child = Bun.spawn([GIT, '-C', this.root, 'cat-file', 'blob', blob], { stdout: Bun.file(temp), stderr: 'pipe' });
+        const [code] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+        if (code !== 0 || (await entryAt(temp))?.size !== size) return null;
+        await chmod(temp, mode);
+        await rename(temp, copy);
+        return copy;
+      } finally { await rm(temp, { force: true }); }
+    })().catch(() => null).finally(() => this.copyingBlobs.delete(copy));
+    this.copyingBlobs.set(copy, making);
+    return making;
+  }
+
   /** A copy of the file as it was before the card changed it (`before`), at one of its places; null where none is kept. */
   private async copyOf(cardId: string, paths: (string | undefined)[], before: Entry | undefined): Promise<string | null> {
     if (!before || before.dir) return null;
+    if (before.gitBlob) return this.blobCopy(cardId, before.gitBlob, before.size, before.gitMode);
     const base = this.undoDir(cardId);
     for (const kind of ['before', 'snapshot', 'text'])
       for (const p of paths) {
         if (!p) continue;
         const copy = join(base, kind, p);
+        if (this.o.git) {
+          const meta = kind === 'before' ? join(base, 'before-state', p) : join(base, 'snapshot-state.json');
+          const data = await readFile(meta, 'utf8').then((s) => JSON.parse(s), () => null);
+          const original: Entry | undefined = kind === 'before' ? data : data?.[p];
+          if (!original || original.ctime !== before.ctime || original.ino !== before.ino) continue;
+        }
         const e = await entryAt(copy);
         if (e && !e.dir && sameStamp(e, before)) return copy;
       }
@@ -892,6 +1052,7 @@ export class FolderWorkspaces implements CardWorkspaces {
 
   /** What undoing the change would do now. */
   private async undoable(cardId: string, t: Tracked): Promise<FolderChange['undo']> {
+    if (t.superseded) return 'changedSince';
     if (t.shared) return 'shared';
     const here = join(this.root, t.path);
     const now = await entryAt(here);

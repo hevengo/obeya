@@ -1,3 +1,4 @@
+import { ownGitWrite } from './own-writes';
 // How Obeya runs git: the binary it calls, here or in a workspace on another machine
 // (`ssh://<host>/…`, see `hosts.ts`), and how a failure reads.
 
@@ -192,11 +193,12 @@ export async function gitRun(cwd: string, args: string[], o: { env?: Record<stri
   const call = gitLogins.length ? commandOf(cwd, args) : undefined;
   const login = call && NETWORK.has(call.command ?? '') ? await loginFor(call.dir) : null;
   const env = login ? { ...o.env, ...login.env } : o.env;
-  return spawnOutput([GIT, '-C', cwd, ...(login?.args ?? []), ...args], {
+  const run = () => spawnOutput([GIT, '-C', cwd, ...(login?.args ?? []), ...args], {
     ...(o.stdin !== undefined ? { stdin: new Blob([o.stdin]) } : {}),
     ...(env ? { env: { ...process.env, ...env } } : {}),
     ...(o.timeout ? { timeout: o.timeout } : {}),
   });
+  return args.some((a) => ['checkout', 'switch', 'merge', 'pull', 'reset', 'restore', 'rebase', 'cherry-pick', 'revert'].includes(a)) ? ownGitWrite(cwd, run, args) : run();
 }
 
 /**

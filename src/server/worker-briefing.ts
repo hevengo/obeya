@@ -39,6 +39,10 @@ export class WorkerBriefing {
     private w: BriefingHost,
   ) {}
 
+  private folderFor(cardId: string) {
+    return folderOf(this.o) ?? this.o.workspaces.folderFor?.(cardId) ?? null;
+  }
+
   private get folder() {
     return folderOf(this.o);
   }
@@ -56,11 +60,12 @@ export class WorkerBriefing {
     // a task the owner wrote is their first words to the worker; one an agent or a plan doc wrote is not
     const by = card?.body.trim() ? taskAuthor(card) : undefined;
     const language = by === 'owner' ? ownersLanguage(this.o.board.conversation(), "the card's task") : `${ownersLanguage(this.o.board.conversation())}${by ? ` ${TASK_BY[by]}` : ''}`;
-    const folder = !!this.folder;
+    const inPlace = !!card && !!this.folderFor(card.id) && !this.folder;
+    const folder = !!this.folder || inPlace;
     return `
 You are a worker agent directed through Obeya, a canvas on which the owner directs coding agents like an engineering director directs a team. ${
       folder
-        ? 'You work on exactly one card, directly in a folder that is not a git repository. Other workers may work on other cards in the same folder at the same time, and so may the owner.'
+        ? inPlace ? 'You work on exactly one card, directly in the configured project folder on its current branch, without a task branch. The owner, other tasks and Obeya landings can change it concurrently.' : 'You work on exactly one card, directly in a folder that is not a git repository. Other workers may work on other cards in the same folder at the same time, and so may the owner.'
         : 'You work on exactly one card, in a workspace of the repository (a clone or worktree) that belongs to that card, on your own branch. Other workers may work on other cards at the same time in their own workspaces.'
     }
 
@@ -78,10 +83,10 @@ ${
     }
 ${this.o.toObeya ? `\n${TO_OBEYA}\n` : ''}
 Rules:
-${folder ? '- Others work in the same folder at the same time: leave what your card is not about as it is.' : card?.contribution ? "- Commit your work on your branch in this workspace. Do not push (Obeya pushes your commits onto the pull request's branch once the owner approves), do not open pull requests, do not switch branches." : '- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.'}
+${inPlace ? '- Leave unrelated work alone. Make no commit or branch switch unless the task explicitly asks. Changes are live immediately; approval leaves them in the project folder and creates no landing.' : folder ? '- Others work in the same folder at the same time: leave what your card is not about as it is.' : card?.contribution ? "- Commit your work on your branch in this workspace. Do not push (Obeya pushes your commits onto the pull request's branch once the owner approves), do not open pull requests, do not switch branches." : '- Commit your work on your branch in this workspace. Do not push, do not open pull requests, do not switch branches.'}
 - Follow the repository's own instructions (CLAUDE.md and docs).
 - Owner-facing text (report, reply, ask, ${prototype ? 'propose_build' : 'propose_card'}, ready_for_review) is in the owner's language, short and concrete. What you write between tool calls also shows on the card for the owner, folded under your next message: keep it brief and in the owner's language too. ${language} The docs you read and the owner's standing preferences do not count as the owner's words.
-- ${repositoryLanguage(this.o.adapter.language, folder)} A demo (its narration, report, or an HTML artifact's words) is in ${LANGUAGE_NAMES[this.demoLanguage()]}, whatever language the owner talks in.${this.o.adapter.demo?.language ? ` This repository's settings name ${LANGUAGE_NAMES[this.o.adapter.demo.language]} for its demos, which holds over the narration language of the demo settings.` : ''}
+- ${repositoryLanguage(this.o.adapter.language, !!this.folder)} A demo (its narration, report, or an HTML artifact's words) is in ${LANGUAGE_NAMES[this.demoLanguage()]}, whatever language the owner talks in.${this.o.adapter.demo?.language ? ` This repository's settings name ${LANGUAGE_NAMES[this.o.adapter.demo.language]} for its demos, which holds over the narration language of the demo settings.` : ''}
 - ${harness === 'codex' ? 'Wait for anything external (a deploy, a CI run, a process to finish) in commands that wait 30 seconds at most, run again until it is there: a note from the owner reaches you only once the running command is done. Anything longer, a point in time further off, or another card getting somewhere (its fix on main), you snooze until (snooze): Obeya wakes you then.' : 'Wait for anything external (a deploy, a CI run, a process to finish) in the background: run_in_background or Monitor, then end your turn; Obeya wakes you when it finishes or fires. A point in time further off than a background command can wait (two hours), or another card getting somewhere (its fix on main), you snooze until (snooze). Never wait with sleep or a polling loop in the foreground: a note from the owner reaches you only once the running command is done.'}
 - When a note or feedback from the owner arrives, answer it with reply. If it is unclear what they want, ask.
 `.trim() + (preferences ? `\n\n${preferences}` : '');
@@ -161,7 +166,9 @@ ${idea.idea.brief}` : '',
       );
     }
     if (this.folder) return this.folderBriefing(card.id, parts, resumed);
-    parts.push(
+    const inPlace = !!this.folderFor(card.id);
+    if (inPlace) parts.push(`You work in the project folder ${this.o.board.row(card.id).workspace}, on its current branch as it stands. Existing dirty and untracked files belong to their owners; leave unrelated work alone. Make no commit or branch switch unless this task explicitly asks. Obeya lists your changes and can discard them before approval. Git-ignored files are tracked only when you edit them directly, not when scripts change them. Owner or IDE writes during your commands can appear in your list too. Use the app already running here; Obeya skips setup and never stops or parks this app.`);
+    else parts.push(
       card.builtOn
         ? `You are on branch ${branch}, which holds the prototype's commits (and any earlier work on this card): look at its log and diff first.`
         : card.adopted && !resumed
@@ -173,7 +180,7 @@ ${idea.idea.brief}` : '',
             : `You are on branch ${branch}, fresh from the default branch.`,
     );
     if (card.adopted) parts.push(adoptedRules(card.adopted));
-    if (this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the clone.`);
+    if (!inPlace && this.o.adapter.setup) parts.push(`First run \`${this.o.adapter.setup}\` in the clone.`);
     const made = fromJson(this.o.board.row(card.id).new_repo);
     if (made?.made && made.from)
       parts.push(
@@ -184,7 +191,7 @@ ${idea.idea.brief}` : '',
         `This repository is new: Obeya created it for this card with a first commit of what its folder held (a default .gitignore, else nothing). It is local only, with no remote. Besides the task, set it up as part of your work: a CLAUDE.md with what the task says about how to work in this repository, and its Obeya settings (\`.obeya/settings.json\`) with the skill \`obeya:settings\`, as the card “${this.o.board.t.adapterSetup.title(basename(this.o.repoPath ?? ''))}” would.`,
       );
     const { run, stop } = this.o.adapter.app ?? {};
-    const parking = stop ? ' While the card waits for the owner, Obeya stops the app in your workspace; your next message then says so.' : '';
+    const parking = !inPlace && stop ? ' While the card waits for the owner, Obeya stops the app in your workspace; your next message then says so.' : '';
     const far = hostName(this.o.board.row(card.id).workspace) ? " (this workspace is on another machine: Obeya forwards that address's port, and only that one, to the owner's)" : '';
     const tryIt = ` Once it runs and opens in a browser, give its address with app_running, so the owner can try it by hand from the card${far}.`;
     if (run?.trim()) parts.push(`How to run the app: ${run.trim()}${parking}${tryIt}`);
@@ -263,7 +270,7 @@ ${idea.idea.brief}` : '',
 
   /** The end of the briefing in a folder without git: where the card works, and how it hands over without a branch. */
   private folderBriefing(cardId: string, parts: string[], resumed: boolean): string {
-    const changed = this.folder!.changed(cardId).length;
+    const changed = this.folderFor(cardId)!.changed(cardId).length;
     parts.push(
       `You work directly in the folder ${this.o.board.row(cardId).workspace}, which is not a git repository: what you change there is there at once, for everyone.${resumed && changed ? ` Your card changed ${changed === 1 ? 'one file' : `${changed} files`} there before; the card lists them.` : ''}`,
     );

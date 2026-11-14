@@ -187,7 +187,7 @@ export interface RepoSettings {
    */
   softPaths?: string[];
   /** Workers get full clones from a pool, or a worktree of the Obeya checkout per card. */
-  workspaces?: 'clones' | 'worktrees';
+  workspaces?: 'clones' | 'worktrees' | 'project-folder';
   /** Accounts whose pull request comments are not review feedback (deploy bots and the like). */
   prNoise?: string[];
   /**
@@ -341,7 +341,8 @@ export interface ResolvedCanvas {
   name: string;
   repos: {
     id: string;
-    workspaces: 'clones' | 'worktrees';
+    workspaces: 'clones' | 'worktrees' | 'project-folder';
+    projectFolderUnavailable?: true;
     /** A folder without git (`RepoConfig.git` false): no branch, landing, clones or hosts. */
     folder?: true;
     /**

@@ -319,11 +319,12 @@ function onServer(info: RepoInfo): boolean {
 }
 
 /** What a repository's ref says of its settings, which may change while the canvas runs: its main branch, how work lands. */
-export function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' | 'pullRequests' | 'direct' | 'folder' | 'forge' | 'upstream'> {
+export function settled(info: RepoInfo, adapter: RepoAdapter): Pick<RepoRef, 'branch' | 'pullRequests' | 'direct' | 'folder' | 'forge' | 'upstream' | 'projectFolder'> {
   if (info.folder) return { branch: '', folder: true };
   const upstream = upstreamOf(info, adapter);
   return {
     branch: info.branch,
+    ...(adapter.workspaces === 'project-folder' ? { projectFolder: true as const } : {}),
     // an origin on a server (not a directory on this machine) may get pull requests of others
     ...(onServer(info) ? { forge: true } : {}),
     ...(adapter.land === 'pr' ? { pullRequests: true, ...(adapter.direct ? { direct: true } : {}) } : {}),

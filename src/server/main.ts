@@ -403,8 +403,8 @@ const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.a
 // what held the server up, or a page, for the owner to notice: in this log and in the home's stalls.log
 const stalls = new Stalls({ home }).start();
 /** Ends everything started above and exits; a declaration, so `leave` near the top may call it. */
-function shutdown(code: number) {
-  canvases?.shutdown();
+async function shutdown(code: number) {
+  const stopped = canvases?.shutdown();
   usage.stop();
   demoSpace.stop();
   endAgentsHere();
@@ -414,6 +414,7 @@ function shutdown(code: number) {
   access.release();
   transcriber.stop();
   narration.stop();
+  await stopped;
   // the supervisor stays across a restart, and gives the entry up when it ends
   if (!process.env.OBEYA_SUPERVISED) (code === TAKEOVER ? takenOver : release)(home, process.pid);
   process.exit(code);

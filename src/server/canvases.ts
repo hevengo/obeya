@@ -138,7 +138,7 @@ export class Canvases extends Listeners {
     }
     if (!c) return;
     if (this.closed || (!now && this.savedWhole)) {
-      c.shutdown();
+      await c.shutdown();
       return;
     }
     this.list.push(c);
@@ -159,7 +159,7 @@ export class Canvases extends Listeners {
   /** Stops every canvas, for Obeya to end; one still starting stops once it runs. */
   shutdown() {
     this.closed = true;
-    for (const c of this.list) c.shutdown();
+    return Promise.all(this.list.map((c) => c.shutdown())).then(() => {});
   }
 
   /** Set once Obeya ends (`shutdown`). */

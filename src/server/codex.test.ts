@@ -1,3 +1,6 @@
+import { Store } from './db';
+import { FolderWorkspaces } from './folder';
+import { gitRepo } from './testing';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -256,6 +259,25 @@ describe.skipIf(process.platform === 'win32')('a Codex session through the app s
     await until(() => s.idles() === 2);
     expect(heard.slice(2)).toEqual([`before Bash {"command":"echo hi > ${file}"} not there`, 'after Bash there']);
     expect(s.requests().find((r) => r.method === 'thread/start')!.params.config['hooks.state']).toHaveProperty(['/<session-flags>/config.toml:post_tool_use:0:0']);
+  });
+
+  test('Codex hooks record a direct ignored edit in a git project folder', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'obeya-codex-project-'));
+    dirs.push(dir);
+    gitRepo(dir, { '.gitignore': '.env\n', 'README.md': 'Project\n' });
+    const store = new Store(':memory:');
+    store.ensureCanvas('test', 'Test');
+    const card = store.insert([{ canvas_id: 'test', kind: 'task', x: 0, y: 0 }])[0]!;
+    const tracker = new FolderWorkspaces(store, { path: dir, dir: join(dir, '..', card.id), git: true });
+    tracker.lease(card.id);
+    const s = start({ cwd: dir, watch: tracker.watch(card.id) }, `patch ${join(dir, '.env')} hello`);
+    await until(() => s.idles() === 1);
+    expect((await tracker.changedFiles(card.id))).toEqual(['.env']);
+    s.session.send(`run echo changed > ${join(dir, 'README.md')}`);
+    await until(() => s.idles() === 2);
+    expect((await tracker.changedFiles(card.id))).toEqual(['.env', 'README.md']);
+    tracker.dispose();
+    dirs.push(join(dir, '..', card.id));
   });
 
   test('a turn that fails for a missing login says so, as the card offers to log in', async () => {

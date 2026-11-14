@@ -214,6 +214,8 @@ export interface Item {
   branch?: string;
   /** Where the branch is checked out, while the card has a workspace: a directory, `host:/dir` on another machine. */
   workspace?: string;
+  /** This run works in the configured git checkout. */
+  projectFolder?: true;
   /** The clone that keeps its branch since its workspace was taken from it, until it works again (the same form as `workspace`). */
   keptIn?: string;
   /** Files the Coordinator expects the card to change. */
@@ -940,6 +942,8 @@ export interface CanvasInfo {
 }
 
 export interface RepoRef {
+  /** Ordinary new tasks default to the configured checkout. */
+  projectFolder?: true;
   id: string;
   name: string;
   path: string;

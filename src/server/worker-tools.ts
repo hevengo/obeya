@@ -144,6 +144,10 @@ export class WorkerTools {
     private w: ToolsHost,
   ) {}
 
+  private folderFor(cardId: string) {
+    return folderOf(this.o) ?? this.o.workspaces.folderFor?.(cardId) ?? null;
+  }
+
   private get folder() {
     return folderOf(this.o);
   }
@@ -507,7 +511,7 @@ export class WorkerTools {
       },
       {
         name: 'ready_for_review',
-        description: `Hand the finished work to the owner, after committing it, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what your last handover and your replies since have not said yet, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary, as does a follow-up to your task that is due only later (start_at). The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in the language of its narration); without a new one, the demo already on the card stands. Then end your turn.`,
+        description: `Hand the finished work to the owner, after ${this.folderFor(cardId) ? 'finishing the changes' : 'committing it'}, running the checks and making the demo. The summary (in ${language}) is what this handover tells the owner beyond what the card's conversation already holds: on your first handover, what changed from the user's point of view and what they really need to know (something left open or not verified, a decision you took for them), in a few short paragraphs at most; on a later one, only what your last handover and your replies since have not said yet, often a sentence. Obeya keeps your handovers and replies together as the card's report for whoever reads it later. A problem you noticed outside the task goes to propose_card, not into the summary, as does a follow-up to your task that is due only later (start_at). The demo: a video's directory and chapter titles in scene order, or an HTML artifact's directory, with its report (in the language of its narration); without a new one, the demo already on the card stands. Then end your turn.`,
         schema: {
           summary: z.string(),
           demo: z
@@ -578,7 +582,7 @@ export class WorkerTools {
                   ),
               }
             : {}),
-          ...(review || this.folder
+          ...(review || this.folderFor(cardId)
             ? {}
             : {
                 pull_requests: z
@@ -598,7 +602,7 @@ export class WorkerTools {
             .max(MAX_RESULT_FILES)
             .optional()
             .describe(
-              `the files your card made or changed ${this.folder ? 'in the folder' : 'on your branch'} that are the result for the owner (a document, a report, a spreadsheet, a page; not the code or configuration behind it), each with its path and a one-line caption in ${language}. The card shows them beside the demo: Markdown formatted, a PDF in the browser's viewer, any other file to open on the owner's computer. Without them, the ones named at your last handover stand.`,
+              `the files your card made or changed ${this.folderFor(cardId) ? 'in the folder' : 'on your branch'} that are the result for the owner (a document, a report, a spreadsheet, a page; not the code or configuration behind it), each with its path and a one-line caption in ${language}. The card shows them beside the demo: Markdown formatted, a PDF in the browser's viewer, any other file to open on the owner's computer. Without them, the ones named at your last handover stand.`,
             ),
         },
         run: (args) => this.handOver(cardId, args as unknown as HandOverArgs, { review, shares, vocabulary, ended, handOver, ending }),
@@ -769,7 +773,7 @@ export class WorkerTools {
     const facts = d && (d.kind ?? 'video') === 'video' ? await videoFacts(d.dir) : {};
     const codeFacts = code ? await videoFacts(code.dir) : {};
     // in a folder, what the change has to show decides whether a handover without a demo shows it beside the conversation
-    const shows = !!this.folder && !d && (await this.w.showsFiles(cardId));
+    const shows = !!this.folderFor(cardId) && !d && (await this.w.showsFiles(cardId));
     // whether the branch holds work and decides where it lands; a review card hands over the PR's head
     // it reviewed, which is all Obeya ever merges, with the commits of its own on top, which Obeya
     // pushes on the owner's approval
@@ -845,7 +849,7 @@ export class WorkerTools {
     // what the owner's button does, as Obeya sees the branch: the worker may know of no commit on it but its own
     const { changed } = git;
     const lands =
-      review || this.folder
+      review || this.folderFor(cardId)
         ? ''
         : !git.work
           ? git.follows
@@ -964,7 +968,7 @@ export class WorkerTools {
       ...(codeVideos ? { code_videos: codeVideos } : {}),
       // the files named stand until a later handover names others (an empty list named clears them); a folder's card handed
       // over without a demo shows what it changed, while there are files of it to show
-      ...(named?.length ? { files: toJson(named) } : this.folder && !demo && !kept && (named || !row.files || row.files === '[]') ? { files: h.shows ? '[]' : null } : named ? { files: null } : {}),
+      ...(named?.length ? { files: toJson(named) } : this.folderFor(cardId) && !demo && !kept && (named || !row.files || row.files === '[]') ? { files: h.shows ? '[]' : null } : named ? { files: null } : {}),
     });
     // the size of the change handed over, for the page to lay out its change list from the first time it opens the card
     void this.w.diff(cardId, false).catch(() => {});

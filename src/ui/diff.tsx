@@ -101,7 +101,7 @@ const APP_LOOK_MS = 10_000;
  * The app running in the card's workspace, while it answers: a link beside the workspace's path for
  * the owner to try it by hand, opened through Obeya, which keeps it running a while after.
  */
-function AppLink({ item }: { item: Item }) {
+export function AppLink({ item }: { item: Item }) {
   // null until the first look has answered: the link holds its place meanwhile, unseen, so the line does not grow when it shows
   const [up, setUp] = useState<boolean | null>(null);
   useEffect(() => {
@@ -176,7 +176,7 @@ export function DiffView({ item, file, onClose, onRead }: { item: Item; file?: s
         <div className="d-head">
           <h2>{t.diff.title(plain(item.title))}</h2>
           <span className="hint">
-            {got?.source === 'folder' ? t.folder.changed : <code>{item.branch}</code>}
+            {got?.source === 'folder' ? item.projectFolder ? t.folder.projectChanged : t.folder.changed : <code>{item.branch}</code>}
             {folder?.undo && ` · ${t.folder.undo[folder.undo]}`}
             {got?.source === 'landed' && ` · ${t.diff.landed}`}
             {size && (

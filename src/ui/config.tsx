@@ -1718,12 +1718,12 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
     return next;
   };
   // "Agents work in": this machine's setting where the repository's says otherwise; worktrees put the clones named aside
-  const setWorkIn = (mode: 'clones' | 'worktrees') => {
+  const setWorkIn = (mode: 'clones' | 'worktrees' | 'project-folder') => {
     if (mode === workIn) return;
     const { workspaces: _, ...others } = repo.settings ?? {};
     const settings = known === mode ? others : { ...others, workspaces: mode };
     let next = without('settings', Object.keys(settings).length ? settings : undefined);
-    if (mode === 'worktrees') {
+    if (mode !== 'clones') {
       parked.current = { ...(repo.clones !== undefined ? { clones: repo.clones } : {}), ...(repo.workspaces ? { workspaces: repo.workspaces } : {}), ...(repo.hosts ? { hosts: repo.hosts } : {}) };
       next = without('hosts', undefined, without('workspaces', undefined, without('clones', undefined, next)));
     } else next = { ...next, ...parked.current };
@@ -1776,7 +1776,7 @@ function RepoRow({ repo, home, resolved, canvasId, problems, focus, where, ask, 
               <Info text={t.config.settings.workspacesHint} />
             </div>
             <div className="cfg-control">
-              <Seg label={t.config.settings.workspaces} options={['worktrees', 'clones'] as const} value={workIn} name={(x) => t.config.settings.workIn[x]} onChange={setWorkIn} />
+              <Seg label={t.config.settings.workspaces} options={(['worktrees', 'clones', 'project-folder'] as const).filter((x) => x !== 'project-folder' || !resolved?.projectFolderUnavailable)} value={workIn} name={(x) => t.config.settings.workIn[x]} onChange={setWorkIn} />
             </div>
           </div>
           {clones ? (

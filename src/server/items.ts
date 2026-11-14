@@ -228,6 +228,7 @@ function work(r: CardRow, themeNow?: ThemeNow): Partial<Item> {
     ...(Object.keys(tags).length ? { tags } : {}),
     ...(r.from_id ? { from: r.from_id } : {}),
     ...(r.branch ? { branch: r.branch } : {}),
+    ...(r.work_place === 'project-folder' ? { projectFolder: true as const } : {}),
     // a workspace on another machine as ssh and scp write it
     ...(r.workspace ? { workspace: r.workspace.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),
     ...(r.kept_in ? { keptIn: r.kept_in.replace(/^ssh:\/\/([^/]+)/, '$1:') } : {}),

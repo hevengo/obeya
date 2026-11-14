@@ -132,7 +132,7 @@ Paths whose edits never count as a conflict between two cards' branches (a trail
 directory): Obeya resolves them itself when it rebases. Use it for docs that many cards touch.
 Default: `["docs/plan/"]`.
 
-### `workspaces` — `"clones"` or `"worktrees"`
+### `workspaces` — `"clones"`, `"worktrees"` or `"project-folder"`
 
 Where workers work. `clones`: a pool of full clones per repository, leased by one card at a time;
 the number comes from "Configuration" (clones to create, or existing ones to use). Use it when
@@ -141,6 +141,16 @@ worktree. `worktrees`: a git worktree of the configured checkout per card, any n
 unless "Configuration" gives the repository slots. Default: `worktrees`. A repository whose
 configuration names clones (clones to create, existing ones, or other machines) works in clones
 whatever the settings say.
+
+`project-folder`: ordinary tasks work directly in the configured checkout, on its current branch,
+without a task branch or landing. Setup is skipped, normal checks run, and Obeya never stops that
+checkout’s app. Changes are listed per card and can be discarded before approval; approval leaves
+them there, uncommitted unless a commit was requested. Git-ignored script output is excluded;
+ignored files edited directly by the worker are included. Demos follow the usual git-repository
+rules. Prototypes, pull request reviews, workstreams and builds on a prototype use their own
+worktree. This option is local only and not available for a checkout registered in the clone pool.
+A run keeps the place resolved at its start across restarts and default changes. There is no
+per-task override yet. Folders without git keep their existing behaviour.
 
 ### `prNoise` — account names
 

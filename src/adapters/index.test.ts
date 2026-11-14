@@ -179,3 +179,13 @@ describe("a repository's Claude Code configuration", () => {
     expect((await readShared(repo)).claude!['.claude/skills/other']).toEqual({ id: head, text: `(commit ${head})` });
   });
 });
+
+ test('project-folder follows the settings layers and source labels', async () => {
+  const parsed = parseShared('{"workspaces":"project-folder"}');
+  expect(parsed.problems).toEqual([]);
+  const info = await repoInfo(gitRepo(join(dir, 'project-default')));
+  expect(repoValues(info, 'worktrees', false, parsed.settings).workspaces).toEqual({ value: 'project-folder', source: 'repository' });
+  expect(withSettings(generic, () => parsed.settings).workspaces).toBe('project-folder');
+  expect(withSettings(generic, () => parsed.settings, true).workspaces).toBe('clones');
+  expect(parseShared('{"workspaces":"elsewhere"}').problems.length).toBeGreaterThan(0);
+});

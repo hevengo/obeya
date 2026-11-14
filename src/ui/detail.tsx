@@ -386,7 +386,7 @@ function TaskView(v: View) {
   }, [arrived, demoWaits, item.demo?.handover, item.demo && JSON.stringify(item.demo.chapters)]);
   const worked = isWorked(item);
   // in a folder without git the card's change list takes the place of its branch
-  const inFolder = !!repo?.folder;
+  const inFolder = !!item.projectFolder || !!repo?.folder;
   // what the card changed, read once for its branch line and its files
   const change = useCardDiff(item, { on: worked, poll: inFolder });
   // the tab the left column shows: a file picked there or in the change list beside the handover
@@ -845,7 +845,7 @@ function ApproveButton({ item, act, lands, change, upstream }: { item: Item; act
   if (lands.inFolder)
     return (
       <>
-        <button className="btn primary" title={item.noChange ? undefined : t.folder.approveHint} onClick={() => act({ action: 'approve' }, item.noChange ? { close: true, ack: t.approvedNoChange } : { close: true, ack: t.folder.approved })}>
+        <button className="btn primary" title={item.noChange ? undefined : item.projectFolder ? t.folder.projectApproveHint : t.folder.approveHint} onClick={() => act({ action: 'approve' }, item.noChange ? { close: true, ack: t.approvedNoChange } : { close: true, ack: t.folder.approved })}>
           {item.noChange ? t.approveNoChange : t.approve}
         </button>
         <DiscardChanges diff={change.diff} act={act} onDone={change.reload} />
@@ -961,7 +961,7 @@ function TaskActions({ v, worked, proto, approve }: { v: View; worked: boolean; 
     item.newRepo?.due ? (
       <Armed label={makingWords(item, choice.name)} undo={t.undo} {...(item.newRepo.making ? {} : { onUndo: () => act({ action: 'stayHere' }, { close: false }) })} />
     ) : (
-      !item.snoozed && <StartButton item={item} act={act} on={!fresh} disabled={!!fresh && !fresh.ready} label={fresh?.button ?? t.start} hint={fresh?.hint ?? (repo?.folder ? t.folder.startHint : t.startHint)} />
+      !item.snoozed && <StartButton item={item} act={act} on={!fresh} disabled={!!fresh && !fresh.ready} label={fresh?.button ?? t.start} hint={fresh?.hint ?? (item.projectFolder || (repo?.projectFolder && !item.parent && !item.prototypeOf && !item.contribution && !item.builtOn && !item.adopted && !item.upstream) ? t.folder.startHint : repo?.folder ? t.folder.startHint : t.startHint)} />
     )
   ) : onPrototype && !item.snoozed ? (
     <StartButton item={item} act={act} label={t.start} hint={t.startHint} />

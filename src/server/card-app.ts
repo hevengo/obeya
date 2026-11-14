@@ -1,3 +1,4 @@
+import { folderOf } from './worker-options';
 // The app in a card's workspace while its worker is away from it: stopped once the card has waited
 // for the owner a while (`app.stop`), unless the owner opened it to try it by hand, and forwarded to
 // the owner's browser from a workspace on another machine.
@@ -64,7 +65,7 @@ export class CardApps {
 
   /** A card that waits for the owner has its app stopped once a quick reply has not come (`app.stop`). */
   parkLater(cardId: string) {
-    if (!this.o.adapter.app?.stop || !this.waitsForOwner(cardId)) return;
+    if ((!folderOf(this.o) && this.o.workspaces.folderFor?.(cardId)) || !this.o.adapter.app?.stop || !this.waitsForOwner(cardId)) return;
     this.parking.set(cardId, Math.max(this.o.parkGrace ?? PARK_GRACE, (this.tried.get(cardId) ?? 0) + (this.o.tryGrace ?? TRY_GRACE) - Date.now()), () => {
       if (!this.waitsForOwner(cardId) || this.stopping.has(cardId)) return;
       const stopping = this.park(cardId).finally(() => this.stopping.delete(cardId));
@@ -150,6 +151,7 @@ export class CardApps {
 
   /** Stops the app in the card's workspace, unless it holds what must stay (`app.keep`). */
   private async park(cardId: string) {
+    if (!folderOf(this.o) && this.o.workspaces.folderFor?.(cardId)) return;
     const { stop, keep } = this.o.adapter.app ?? {};
     // the settings lost the command since the grace began
     if (!stop) return;

@@ -1,6 +1,7 @@
 // One canvas and everything that works on it: its repositories (each with adapter, workspaces,
 // workers, project agents and PR watcher), the board, the Coordinator and the voice commands.
 
+import { projectWorkspaces } from './project-workspaces';
 import type { GithubForNewRepo } from './new-repo';
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { mkdirSync, realpathSync } from 'node:fs';
@@ -769,7 +770,7 @@ export class CanvasRuntime {
       workspaces = new FolderWorkspaces(deps.store, { path: info.path, dir: join(deps.home, 'undo', resolved.id, ref.id) });
     else {
       const git = new Workspaces(deps.store, resolved.id, {
-        mode: adapter.workspaces,
+        mode: adapter.workspaces === 'project-folder' ? 'worktrees' : adapter.workspaces,
         repoPath: info.path,
         dir: workspaceDir,
         repo: isHome ? null : ref.id,
@@ -804,7 +805,9 @@ export class CanvasRuntime {
       for (const host of new Set(git.list().map((w) => hostName(w.path)))) if (host !== null && !hosts.has(host)) git.keepOnly(host, []);
       // the folders of Obeya's clones that left the pool earlier go once nothing in them would be lost
       git.sweep();
-      workspaces = git;
+      const tracker = new FolderWorkspaces(deps.store, { path: info.path, dir: join(deps.home, 'undo', resolved.id, ref.id), git: true });
+      stops.push(() => tracker.dispose());
+      workspaces = projectWorkspaces(deps.store, git, tracker, adapter.workspaces === 'project-folder', !deps.store.hasWorkspace(info.path));
     }
     // a repository without an account keeps the machine's login, its workspaces inside the first repository's folder too
     if (!folder) stops.push(useGitLogin(loginRoots, onGithub?.host ?? '', githubLogin));
@@ -896,22 +899,24 @@ export class CanvasRuntime {
    * it, as when its set-up fails as it starts. It leaves the canvas, its cards kept, with why shown at
    * it; "Try again" starts it again. Without its home repository the canvas stops.
    */
-  private clonesFailed(r: Repo, e: unknown) {
+  private async clonesFailed(r: Repo, e: unknown) {
     const at = this.repos.indexOf(r);
     if (this.shutDown || at < 0) return;
     console.error(`Obeya: ${r.info.path}: its clones cannot be made, left out of the canvas ${this.id}; its cards are kept: ${messageOf(e)}`);
-    this.stopRepo(r);
-    this.repos.splice(at, 1);
+    await this.stopRepo(r);
+    const current = this.repos.indexOf(r);
+    if (this.shutDown || current < 0) return;
+    this.repos.splice(current, 1);
     this.showRepos();
     this.fail(r.ref.id, e);
-    if (at === 0) this.homeDown(e);
+    if (current === 0) await this.homeDown(e);
     this.board.changed();
   }
 
   /** Its home repository does not run: the canvas stops, its cards kept, and is left out of those Obeya serves. */
-  private homeDown(e: unknown) {
+  private async homeDown(e: unknown) {
     this.stopped = true;
-    this.shutdown();
+    await this.shutdown();
     this.deps.stopped?.(this, messageOf(e));
   }
 
@@ -954,7 +959,7 @@ export class CanvasRuntime {
     for (const stop of r.stops) stop();
     r.docs?.();
     r.prs?.stop();
-    r.workers.shutdown();
+    return r.workers.shutdown();
   }
 
   /**
@@ -1135,7 +1140,7 @@ export class CanvasRuntime {
     if (this.retiring) {
       const done = this.retiring;
       this.retiring = null;
-      this.shutdown();
+      await this.shutdown();
       console.log(`Obeya: the canvas ${this.id} stopped; its cards are kept`);
       done();
       return;
@@ -1181,7 +1186,7 @@ export class CanvasRuntime {
     for (const path of p.paths) {
       const at = this.repos.findIndex((r) => r.info.path === path);
       const was = at >= 0 ? this.repos[at]! : undefined;
-      if (was) this.stopRepo(was);
+      if (was) await this.stopRepo(was);
       const i = resolved.repos.findIndex((x) => x.read.info.path === path);
       if (i < 0) {
         if (at >= 0) this.repos.splice(at, 1);
@@ -1225,7 +1230,7 @@ export class CanvasRuntime {
       // without its home repository the canvas does not run: it stops, its cards kept
       console.error(`Obeya: the home repository of the canvas ${this.id} does not start; the canvas stopped, its cards are kept`);
       this.emitPending();
-      this.homeDown(homeDown);
+      await this.homeDown(homeDown);
       return;
     }
     this.showRepos();
@@ -2329,10 +2334,11 @@ export class CanvasRuntime {
     this.pending = null;
     for (const [, w] of this.writing) clearTimeout(w.timer);
     for (const stop of this.branchSettings.values()) stop();
-    for (const r of this.repos) this.stopRepo(r);
+    const stopping = this.repos.map((r) => this.stopRepo(r));
     this.coordinator.shutdown();
     this.commander.shutdown();
     this.explorers.shutdown();
+    return Promise.all(stopping).then(() => {});
   }
 }
 

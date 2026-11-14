@@ -322,8 +322,14 @@ export class Workers {
   }
 
   /** The folder without git the cards work in, where the repository is one (design: Folders without git). */
+  private trackingStops = new Map<string, Promise<void>>();
+
   private get folder(): FolderWorkspaces | null {
     return folderOf(this.o);
+  }
+
+  private folderFor(cardId: string): FolderWorkspaces | null {
+    return this.folder ?? this.o.workspaces.folderFor?.(cardId) ?? null;
   }
 
   /** Whether a video demo here may go to a page for colleagues, which the worker then writes. */
@@ -381,9 +387,9 @@ export class Workers {
     const contribution = fromJson(row.contribution);
     const pr = contribution ? toJson<PrState>({ url: contribution.url, number: contribution.number, seen: [], reported: [] }) : null;
     // a fresh session knows of no app that was stopped
-    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch, session_id: null, pr, approved_at: null, parked: null, paused: null, pausing: null, snoozed: null, app: null });
+    this.o.board.work(card.id, { state: 'working', need: null, detail: null, status_line: null, workspace: path, branch: !this.folder && this.folderFor(card.id) ? null : branch, session_id: null, pr, approved_at: null, parked: null, paused: null, pausing: null, snoozed: null, app: null });
     const t = this.o.board.t.worker;
-    this.o.board.log(card.id, 'state', 'obeya', this.folder ? t.startedInFolder : contribution ? t.reviewStarted(contribution.number, contribution.author) : t.started(branch));
+    this.o.board.log(card.id, 'state', 'obeya', this.folderFor(card.id) ? t.startedInFolder : contribution ? t.reviewStarted(contribution.number, contribution.author) : t.started(branch));
     const launch = (headProblem?: string | null) =>
       this.launch(card.id, this.brief.briefing(card, branch, !!row.branch, headProblem, up && startedAt ? { up, start: startedAt } : undefined, adoptedAt ?? undefined), undefined, this.brief.taskImages(card));
     return this.whenReady(
@@ -547,11 +553,11 @@ export class Workers {
       {},
       (path, worktree) =>
         [
-          this.folder
+          this.folderFor(card.id)
             ? `The owner asks about this card${how}. It is done, and your session had ended; it goes on in the folder ${path}, which other cards and the owner may have changed since.`
             : `The owner asks about this card${how}. ${card.state === 'done' ? 'It was closed without a change to the repository' : `Its work is on main${commit ? ` (${commit.slice(0, 7)})` : ''}`}, and your session had ended; it goes on in a fresh workspace ${worktree ? 'at the head of' : 'on'} the branch ${row.branch}, where main may have moved on since.`,
           this.words(card.id, w),
-          this.folder ? FOLLOW_UP_FOLDER : FOLLOW_UP,
+          this.folderFor(card.id) ? FOLLOW_UP_FOLDER : FOLLOW_UP,
           ...(worktree ? [IN_WORKTREE] : []),
         ].join('\n\n'),
       [...this.stills(w.place), ...w.images],
@@ -939,7 +945,7 @@ export class Workers {
     // approved, a card its worker snoozed on its handover wakes no more: the check it was to make again is done with
     const unsnooze = () => card.snoozed && this.o.board.work(cardId, { snoozed: null });
     // in a folder without git, what it changed is in the folder already
-    if (this.folder) {
+    if (this.folderFor(cardId)) {
       unsnooze();
       return void this.close(cardId, 'owner', this.approvalComments(cardId));
     }
@@ -1027,9 +1033,9 @@ export class Workers {
    */
   async undo(cardId: string): Promise<UndoReport> {
     const card = this.card(cardId);
-    if (!this.folder) throw new BadRequest('notFolder', 'only the changes of a card in a folder without git are undone');
+    if (!this.folderFor(cardId)) throw new BadRequest('notFolder', 'only changes of a card working directly in its folder are undone');
     if (!handedOver(card) || this.landing.has(cardId)) throw new BadRequest('notReady', 'only a card waiting for approval has its changes discarded');
-    const report = await this.folder.undo(cardId);
+    const report = await this.folderFor(cardId)!.undo(cardId);
     const t = this.o.board.t.worker;
     const files = (list: string[]) => list.join(', ');
     this.o.board.log(
@@ -1048,7 +1054,7 @@ export class Workers {
       'The card still waits for the owner.',
     ];
     this.o.board.work(cardId, {
-      detail: toJson({ ...detail, noChange: !this.folder.changed(cardId).length || undefined }),
+      detail: toJson({ ...detail, noChange: !this.folderFor(cardId)!.changed(cardId).length || undefined }),
       unheard: this.unheardWith(cardId, told.filter(Boolean).join(' ')),
     });
     return report;
@@ -1381,9 +1387,9 @@ export class Workers {
     this.bump(cardId);
     const page = this.workOver(cardId, 'done', { unchanged: true }, { pr: null });
     const t = this.o.board.t.worker;
-    const folder = !!this.folder?.changed(cardId).length;
+    const folder = !!this.folderFor(cardId)?.changed(cardId).length;
     // what it changed in the folder stays: nothing of it is undone any more
-    this.folder?.done(cardId);
+    this.folderFor(cardId)?.done(cardId);
     this.o.board.log(cardId, 'state', by, by === 'owner' ? (folder ? t.approvedFolder : t.approvedUnchanged) : t.doneUnchanged);
     // the worker that closed it is told by the tool's result, and its turn's end finishes it (unless it waits for its demo's page)
     if (by === 'owner')
@@ -1395,7 +1401,7 @@ export class Workers {
         ],
         comments,
         true,
-        this.folder ? AFTER_DONE : AFTER_LANDING,
+        this.folderFor(cardId) ? AFTER_DONE : AFTER_LANDING,
       );
     return page.text;
   }
@@ -1536,7 +1542,8 @@ export class Workers {
     } else if (row.workspace) {
       const removeLanded = () => this.o.workspaces.removeLanded(cardId, row.branch ?? '');
       // the card is done either way; a leftover worktree does no harm
-      this.whileFreeing(cardId, row.workspace, reading ? reading.catch(() => {}).then(removeLanded) : removeLanded(), 'freeing a landed workspace');
+      const tracked = this.trackingStops.get(cardId);
+      this.whileFreeing(cardId, row.workspace, tracked ? Promise.all([tracked, reading?.catch(() => {})]).then(removeLanded) : reading ? reading.catch(() => {}).then(removeLanded) : removeLanded(), 'freeing a landed workspace');
     }
     const landed = fromJson(row.landed);
     this.o.board.work(cardId, finishedRow(row));
@@ -1839,7 +1846,7 @@ export class Workers {
     if (card.finishing) {
       this.o.board.log(cardId, 'state', 'owner', this.o.board.t.worker.stopped);
       this.finish(cardId);
-      return Promise.resolve();
+      return this.trackingStops.get(cardId) ?? Promise.resolve();
     }
     if (card.state !== 'working' && card.state !== 'waiting') throw new BadRequest('noAgent', 'no agent works on this card');
     // its work is on main since its landing: stopped while asking about its pull request in another repository, the card is live with that landing, and nothing follows the pull request any more
@@ -1869,7 +1876,7 @@ export class Workers {
   freeStoppedWorkspace(cardId: string, refresh = false): Promise<void> {
     const still = this.sameRun(cardId);
     const path = this.o.board.row(cardId).workspace;
-    return this.o.workspaces.hasWork(cardId, refresh).then((keep) => {
+    return Promise.resolve(this.trackingStops.get(cardId)).then(() => this.o.workspaces.hasWork(cardId, refresh)).then((keep) => {
       const card = this.o.board.item(cardId);
       if (keep || !card || !stopped(card) || card.queue || !still() || this.o.board.row(cardId).workspace !== path) return;
       this.o.workspaces.release(cardId);
@@ -1883,7 +1890,7 @@ export class Workers {
    * landed, nor a prototype's.
    */
   evictable(cardId: string): boolean {
-    if (this.o.workspaces.mode !== 'clones' || this.evicting.has(cardId)) return false;
+    if (this.folderFor(cardId) || this.o.workspaces.mode !== 'clones' || this.evicting.has(cardId)) return false;
     // from the row: the pools the board's snapshot shows ask for each card
     let row: CardRow;
     try {
@@ -2343,7 +2350,7 @@ export class Workers {
     const path = row.workspace;
     if (!path) return;
     this.kept.delete(path);
-    const retaken = row.branch ? this.o.workspaces.retake(cardId, path, row.branch) : null;
+    const retaken = (row.branch || this.folderFor(cardId)) ? this.o.workspaces.retake(cardId, path, row.branch ?? '') : null;
     if (!retaken) {
       // another card works in that clone now: the card's branch stays there, for its next start to take from it
       const taken = this.o.workspaces.mode === 'clones' && this.o.workspaces.list().some((w) => w.path === path && w.card_id);
@@ -2483,6 +2490,7 @@ export class Workers {
     // a "Push main" still in its undo window goes undone: the new workers could not take it back
     this.reviews.shutdown();
     this.apps.shutdown();
+    return Promise.allSettled([...this.trackingStops.values()]).then(() => {});
   }
 
   // ---------------------------------------------------------------- sessions
@@ -2498,6 +2506,12 @@ export class Workers {
   }
 
   private launch(cardId: string, message: string, resume?: string, images: string[] = []) {
+    const settling = this.trackingStops.get(cardId);
+    if (settling) {
+      const path = this.o.board.row(cardId).workspace;
+      if (path) void this.whenReady(cardId, settling.then(() => path), () => this.launch(cardId, message, resume, images), () => {});
+      return;
+    }
     const row = this.o.board.row(cardId);
     if (!row.workspace) throw new Error(`card ${cardId} has no workspace to work in`);
     const preferences = this.o.preferences?.() ?? '';
@@ -2539,7 +2553,7 @@ export class Workers {
       contextUpdate: () =>
         [this.restartStillDue(cardId, live), this.pauseStillDue(live), this.pageNewsNow(cardId, live), this.unheardNow(cardId, live), this.preferencesUpdate(live), this.decisionsUpdate(cardId, live)].filter(Boolean).join('\n\n') || undefined,
       askOwner: (request, signal) => this.askOwner(cardId, live, request, signal),
-      ...(this.folder ? { watch: this.folder.watch(cardId) } : {}),
+      ...(this.folderFor(cardId) ? { watch: this.folderFor(cardId)!.watch(cardId) } : {}),
       ...(resume ? { resume } : {}),
       ...(this.o.permissionMode ? { permissionMode: this.o.permissionMode } : {}),
       onEvent: (e) => this.onEvent(cardId, live, e),
@@ -2860,6 +2874,19 @@ export class Workers {
     this.live.delete(cardId);
     if (live) this.stopWaiting(live);
     live?.session.close();
+    const folder = this.folderFor(cardId);
+    if (folder && live) {
+      const settled = live.session.done.catch(() => {}).then(() => folder.stop(cardId)).catch((error) => {
+        console.error(`settling stopped card ${cardId}:`, error);
+        throw error;
+      }).finally(() => {
+        if (this.trackingStops.get(cardId) === settled) this.trackingStops.delete(cardId);
+        if (!this.shut) this.o.board.changed();
+      });
+      this.trackingStops.set(cardId, settled);
+      // Non-waiting end paths still observe a failure; callers that release the folder await it.
+      void settled.catch(() => {});
+    }
     // its slot is free again
     if (live?.busy) this.o.board.changed();
   }
@@ -2971,7 +2998,7 @@ export class Workers {
    */
   private turnEnded(cardId: string, live: Live, background: number, waited = false, more = false) {
     // calls whose end its hooks never heard of (refused, cut off) end with the turn
-    void this.folder?.settle(cardId);
+    void this.folderFor(cardId)?.settle(cardId);
     // the next turn starts afresh; a snooze holds across a turn a message from Obeya still starts (a
     // restart notice): its session ends after that one
     const { handedOver, snoozed, held: closing, ...turn } = live.turn;
@@ -3217,7 +3244,7 @@ export class Workers {
   private backgroundChanged(cardId: string, live: Live, running: { id: string; description: string }[]) {
     live.work.changed(running.length);
     // what it changes in a folder without git meanwhile is the card's
-    this.folder?.background(cardId, running.length > 0);
+    this.folderFor(cardId)?.background(cardId, running.length > 0);
     const now = Date.now();
     live.tasks = new Map(running.map((t) => [t.id, { ...live.tasks.get(t.id), description: t.description, since: live.tasks.get(t.id)?.since ?? now }]));
     // the card shows what runs while the worker is in a turn

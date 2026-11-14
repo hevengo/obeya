@@ -7,7 +7,7 @@ import { type CardDiff, diffSize, shownChanges } from '../core/diff';
 import { changeRows } from '../core/files';
 import type { CardAction, Item } from '../core/types';
 import type { ActDone } from './cardSheet';
-import { CopyPath, DiffView, Lines } from './diff';
+import { AppLink, CopyPath, DiffView, Lines } from './diff';
 import { atWork, ChangeList } from './files';
 import { t } from './strings';
 
@@ -34,7 +34,7 @@ export function FolderLine({ item, diff, sizeBelow }: { item: Item; diff: CardDi
   const below = sizeBelow && !!changes.length;
   return (
     <>
-      {t.folder.changed}
+      {item.projectFolder ? t.folder.projectChanged : t.folder.changed}
       {diff && (
         <>
           {below ? null : ': '}
@@ -65,6 +65,7 @@ export function FolderLine({ item, diff, sizeBelow }: { item: Item; diff: CardDi
           <CopyPath path={item.workspace} />
         </>
       )}
+      <AppLink item={item} />
       {open && <DiffView item={item} onClose={() => setOpen(false)} />}
     </>
   );
@@ -79,7 +80,7 @@ export function FolderBox({ item, diff }: { item: Item; diff: CardDiff | null })
   if (!rows.length) return null;
   return (
     <div className="f-box">
-      <b>{t.folder.changed}</b>
+      <b>{item.projectFolder ? t.folder.projectChanged : t.folder.changed}</b>
       <ChangeList item={item} rows={rows} fold={atWork(item)} />
     </div>
   );

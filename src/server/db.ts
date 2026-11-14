@@ -1453,6 +1453,11 @@ export class Store {
     return row?.state ?? null;
   }
 
+  /** Cards with a change record in this shared folder, including stopped and finished cards. */
+  folderCardIds(folder: string): string[] {
+    return (this.db.query('SELECT card_id FROM folder_cards WHERE folder = $folder').all({ folder }) as { card_id: string }[]).map((r) => r.card_id);
+  }
+
   /** Keeps the card's record in the folder; null removes it. */
   setFolderCard(cardId: string, folder: string, state: string | null) {
     if (state === null) this.db.query('DELETE FROM folder_cards WHERE card_id = $c').run({ c: cardId });

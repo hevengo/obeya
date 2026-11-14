@@ -223,7 +223,7 @@ billed. The phone view shows a card's figure as the desktop does; its bar has no
 
 ### Workspaces
 
-A card works in a worktree of its own, unless the repository's settings say clones or its
+By default a card works in a worktree of its own, unless the repository's settings say clones or its
 configuration names some (`clones`, `workspaces` or `hosts`). Worktrees: any number in parallel
 unless the repository has `slots`. Clones (for tools that break in a worktree, or an app stack per
 clone): a pool, each clone leased by one card. `clones` is how many Obeya makes in its own directory
@@ -426,6 +426,37 @@ branch is work not on `origin`, never counted as landed in another form (its sta
 hold what its last commit undoes): a clone holding one stays on disk when it leaves the pool (see
 above).
 
+### Tasks in the project folder
+
+With `workspaces: "project-folder"`, ordinary tasks run in the configured git checkout, on
+its current branch as it stands. No task branch is made or switched to. Prototypes, contributor
+pull request reviews, workstreams and builds based on a prototype keep their own worktree. A
+checkout registered in the clone pool cannot be used in place; this mode runs locally only.
+Each run's resolved place is stored when it starts and survives stop/resume, server restarts and
+changes to the default. Existing runs in isolated workspaces stay there. Slots still cap busy
+workers. Per-task selection is not offered yet.
+
+The worker is told that the owner, other tasks and Obeya landings can edit concurrently, to leave
+unrelated work alone and make no commit or branch switch unless explicitly asked. Setup is skipped;
+normal checks still apply. It uses the app already running in the checkout. Approval makes the
+card done and leaves its changes there, uncommitted unless the task committed them. Git-repository
+handover rules still apply: a demo always, a code video when required by the repository.
+
+The per-card change list and discard below are shared with folders without git. Here git enumerates
+tracked files and non-ignored untracked files; manifests and snapshots never descend into ignored
+dependencies, builds, databases or git metadata. An editing tool also follows the exact file it
+writes, even when ignored, and keeps its previous contents. Scripts changing ignored files are
+not followed. File-level attribution can include owner or IDE saves during a writing command;
+the visible list is what the owner reviews before discarding. Overlapping and subsequently changed
+files retain the same undo protection. Obeya's own git operations (landings, pulls and taking over
+settings) advance the baseline only for the files they actually wrote to the resulting git state;
+unrelated concurrent changes remain observable. A concurrent edit to a file being landed is
+compared with the landed version, and discarding cannot restore a version from before that
+landing. Stopping or pausing a worker keeps tracking its foreground and background writes until the
+session exits, then takes the final snapshot before release or resume. Restarts drain the old
+tracker before starting its replacement. The existing landing refusal for local changes
+is unchanged; scheduling around them is not part of this mode yet.
+
 ### Folders without git
 
 A repository may be a folder that is to stay without git: a family archive in a cloud drive, where a
@@ -492,7 +523,9 @@ done or discarded, and is made afresh if its worker goes on.
 
 ### Parking
 
-A card waiting for the owner (handed over, asked, pull request open), its worker idle, has the app in
+Project-folder tasks never park or stop the checkout’s app, including on release or cleanup.
+
+A card in its own workspace waiting for the owner (handed over, asked, pull request open), its worker idle, has the app in
 its workspace stopped after five minutes, so a quick reply does not pay for a restart
 (`OBEYA_PARK_GRACE`, in seconds, for demos and live checks). Obeya runs the settings' `app.stop`
 there (once the owner trusted it, see Trusting a repository's commands), unless `app.keep` exits 0
