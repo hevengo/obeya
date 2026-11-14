@@ -25,6 +25,13 @@ const out = resolve(values.out ?? join(ROOT, 'dist'));
 const targets = values.all ? (Object.keys(TARGETS) as Target[]) : named.length ? named : [here()];
 for (const t of targets) if (!isTarget(t)) fail(unknownTarget(t));
 
+// Bun before 1.3.11 compiles the page with its script and styles under relative paths (`./chunk-….js`),
+// which a canvas's address (`/c/<canvas>`) resolves beside itself: every load there but the first
+// at `/` stays blank, in the app's window too. Run from the checkout, the page is not affected.
+const MIN_BUN = '1.3.11';
+if (Bun.semver.order(Bun.version, MIN_BUN) < 0)
+  fail(`Bun ${Bun.version} is too old to build Obeya: the page it compiles stays blank at a canvas's address. Build with Bun ${MIN_BUN} or later (\`bun upgrade\`).`);
+
 /** What goes among the resources: everything another process runs or imports, tests left out. */
 function resources(dir: string) {
   const notTests = (src: string) => !/\.test\.ts$|__pycache__|\.DS_Store$/.test(src);
