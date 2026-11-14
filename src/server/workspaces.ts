@@ -81,12 +81,15 @@ function mayExist(path: string): boolean {
 }
 
 /**
- * Whether a workspace's directory exists, here or on its host (where an unreachable host counts as
- * no); without blocking the server, since for a workspace on another machine it asks over SSH.
+ * Whether a workspace exists here or on its host. An unreachable host is an inspection error,
+ * not an absent directory; SSH runs without blocking the server.
  */
 async function existsAsync(path: string): Promise<boolean> {
   const there = remoteWorkspace(path);
-  return there ? (await there.host.run(['test', '-e', there.path])).code === 0 : existsSync(path);
+  if (!there) return existsSync(path);
+  const result = await there.host.run(['test', '-e', there.path]);
+  if (result.code !== 0 && result.code !== 1) throw new WorkspaceError(result.stderr || `cannot check ${path}: exit code ${result.code}`);
+  return result.code === 0;
 }
 
 /** `git diff` as Obeya shows it to the owner: plain, with renames found and file names unquoted. */

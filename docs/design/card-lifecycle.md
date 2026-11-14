@@ -231,7 +231,7 @@ Questions after the work).
 The owner archives a finished card ("Archive" on it, its archive button on the canvas, or all
 finished ones at once in the archive); a prototype goes there when it ends (see Prototypes). A
 stopped task ("Stopped") can be archived one at a time, for the owner to come back to, beside "Start
-again" and "Delete"; not while it waits to start, nor while its workspace holds work that has not
+again" and "Delete"; not while it waits to start, nor while its workspace cannot be inspected, holds work that has not
 landed or a clone keeps its branch since its workspace was taken, which would lie unseen in a clone
 (the button is greyed and says why), unless its repository does not run on the canvas (see
 Repositories and configuration). A stopped card opens like a card an agent worked on, the task
