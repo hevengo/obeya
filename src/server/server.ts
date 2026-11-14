@@ -762,6 +762,21 @@ function fileRoutes(x: Routing) {
       }),
     },
     // a demo a later handover replaced, which the owner went back to
+    '/api/c/:canvas/cards/:id/code-video/*': {
+      GET: files((req) => {
+        const demo = pages.canvas(req.params.canvas)?.board.demoFiles(req.params.id!, undefined, 'code');
+        return demo ? serveDemoFile(demo, tail(req, '/code-video/'), req) : null;
+      }),
+    },
+    '/api/c/:canvas/cards/:id/code-videos/:n/*': {
+      GET: files((req) => {
+        const n = Number(req.params.n);
+        if (!Number.isInteger(n) || n < 0) return null;
+        const route = `/code-videos/${n}/`;
+        const demo = pages.canvas(req.params.canvas)?.board.demoFiles(req.params.id!, n, 'code');
+        return demo ? serveDemoFile(demo, tail(req, route), req, route) : null;
+      }),
+    },
     '/api/c/:canvas/cards/:id/demos/:n/*': {
       GET: files((req) => {
         const n = Number(req.params.n);

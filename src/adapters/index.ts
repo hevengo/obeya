@@ -75,7 +75,7 @@ export function repoValues(repo: RepoInfo, detected: string, clones = false, sha
     prNoise: value(a.prNoise, 'prNoise'),
     language: value(a.language, 'language'),
     app: { run: nested('app', 'run', ''), stop: nested('app', 'stop', ''), keep: nested('app', 'keep', '') },
-    demo: { site: nested('demo', 'site', null), language: nested('demo', 'language', null) },
+    demo: { site: nested('demo', 'site', null), language: nested('demo', 'language', null), code: nested('demo', 'code', '') },
   };
 }
 

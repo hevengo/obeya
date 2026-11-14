@@ -776,15 +776,17 @@ export class Workers {
   private place(cardId: string, spot: SpotInput): Spot {
     const at = Math.max(0, Math.round(spot.at * 10) / 10);
     const row = this.o.board.row(cardId);
-    const current = fromJson(row.demo) ?? undefined;
-    const earlier = spot.demo !== undefined && spot.demo !== current?.handover ? (fromJson(row.demos) ?? []).findLast((d) => d.handover === spot.demo) : undefined;
-    const d = earlier ?? current;
+    const current = fromJson(spot.video === 'code' ? row.code_video : row.demo) ?? undefined;
+    const historical = spot.demo !== undefined && spot.demo !== current?.handover;
+    const earlier = historical ? (fromJson(spot.video === 'code' ? row.code_videos : row.demos) ?? []).findLast((d) => d.handover === spot.demo) : undefined;
+    const d = historical ? earlier : current;
     return {
       at,
+      ...(spot.video ? { video: spot.video } : {}),
       ...(d && d.kind !== 'html' ? placeIn(d.dir, d.chapters, at) : {}),
       ...(spot.still ? { still: spot.still } : {}),
-      ...(d?.handover !== undefined ? { demo: d.handover } : {}),
-      ...(earlier ? { earlier: true as const } : {}),
+      ...(spot.demo !== undefined ? { demo: spot.demo } : d?.handover !== undefined ? { demo: d.handover } : {}),
+      ...(historical ? { earlier: true as const } : {}),
     };
   }
 

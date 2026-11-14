@@ -1,3 +1,4 @@
+import { DEFAULT_CODE_VIDEO } from '../core/code-video';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -84,7 +85,7 @@ describe('building an idea in a new repository', () => {
     expect(git(path, 'log', '--format=%an %s')).toBe('Ada Lovelace First commit');
     expect(existsSync(join(path, '.gitignore'))).toBe(true);
     expect(git(path, 'remote')).toBe('');
-    expect(JSON.parse(readFileSync(join(dir, 'canvases.json'), 'utf8')).at(-1)).toEqual({ repos: [{ path }] });
+    expect(JSON.parse(readFileSync(join(dir, 'canvases.json'), 'utf8')).at(-1)).toEqual({ repos: [{ path, settings: { demo: { code: DEFAULT_CODE_VIDEO } } }] });
     expect(there.board.canvas.name).toBe('super59');
     // the card is there, decided as "Build it like this" decides it, with its conversation, decisions and screenshot, out of its group
     await until(() => there.board.item(card.id)?.queue || there.board.item(card.id)?.state === 'working');
@@ -116,6 +117,7 @@ describe('building an idea in a new repository', () => {
     expect(brief).toContain('This repository is new');
     expect(brief).toContain('obeya:settings');
     expect(brief).toContain('CLAUDE.md');
+    expect(brief).toContain(DEFAULT_CODE_VIDEO);
   });
 
   test('"Undo" in the undo window leaves everything as it was', async () => {
@@ -268,7 +270,7 @@ describe('a new repository from an existing project', () => {
     expect(git(path, 'remote', 'get-url', 'upstream')).toBe(original);
     expect(git(path, 'symbolic-ref', 'refs/remotes/upstream/HEAD')).toBe('refs/remotes/upstream/main');
     // the settings that make the approval offer the pull request to the original take effect at once, on this machine
-    expect(JSON.parse(readFileSync(join(dir, 'canvases.json'), 'utf8')).at(-1)).toEqual({ repos: [{ path, settings: { land: 'main' } }] });
+    expect(JSON.parse(readFileSync(join(dir, 'canvases.json'), 'utf8')).at(-1)).toEqual({ repos: [{ path, settings: { land: 'main', demo: { code: DEFAULT_CODE_VIDEO } } }] });
     const there = set.get('widgets')!;
     expect(there.board.canvas.repos[0]).toMatchObject({ branch: 'main', upstream: { ref: 'upstream/main', branch: 'main' } });
     expect(there.board.events(task.id).map((e) => e.text)).toContainEqual(expect.stringContaining('ada/widgets'));
@@ -299,7 +301,7 @@ describe('a new repository from an existing project', () => {
     expect(asked).toEqual(['look acme/widgets as gh']);
     expect(git(path, 'remote')).toBe('origin');
     expect(git(path, 'remote', 'get-url', 'origin')).toBe(original);
-    expect(JSON.parse(readFileSync(join(dir, 'canvases.json'), 'utf8'))[0].repos.at(-1)).toEqual({ path });
+    expect(JSON.parse(readFileSync(join(dir, 'canvases.json'), 'utf8'))[0].repos.at(-1)).toEqual({ path, settings: { demo: { code: DEFAULT_CODE_VIDEO } } });
   });
 
   test('a folder or any other git URL is cloned as it is; the card says from where', async () => {

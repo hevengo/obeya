@@ -23,7 +23,9 @@ const TEXT_CAP = 400_000;
 /** The highest a page grows in its frame; a higher one scrolls inside it. */
 const PAGE_CAP = 30000;
 
-const DEMO = '';
+export const DEMO = '';
+// A selection that cannot collide with a repository path.
+export const CODE_VIDEO = '\0code-video';
 
 /** A line of the change list whose file is not read yet (`ChangeList`'s `pending`). */
 type Pending = { pending: number };
@@ -34,12 +36,12 @@ type Pending = { pending: number };
  * card's change (`useCardDiff`), null until read. `tab`: the path of the file picked (`''` the
  * demo); null for the first.
  */
-export function ResultFiles({ item, diff: change, demo, tab, onTab }: { item: Item; diff: CardDiff | null; demo: ReactNode; tab: string | null; onTab: (path: string) => void }) {
+export function ResultFiles({ item, diff: change, demo, codeVideo, tab, onTab }: { item: Item; diff: CardDiff | null; demo?: (active: boolean) => ReactNode; codeVideo?: (active: boolean) => ReactNode; tab: string | null; onTab: (path: string) => void }) {
   // the demo's line says what it is, a video or an artifact; where the card's demos are of both kinds, only that it is the demo
   const kinds = new Set([...(item.demos ?? []), item.demo].map((d) => d?.kind ?? 'video'));
   const demoKind = demo ? (kinds.size === 1 ? [...kinds][0]! : 'any') : undefined;
   // beside a demo, and while the agent is at work, the code behind the result waits folded
-  const fold = !!demo || atWork(item);
+  const fold = !!demo || !!codeVideo || atWork(item);
   const rows = changeRows(change, item.files);
   // until the change is read, the lines its last read size says it has stand empty in their place, so the demo under them does not move
   const pending = change ? 0 : Math.max(0, (item.changeSize?.files ?? 0) - rows.length);
@@ -47,6 +49,7 @@ export function ResultFiles({ item, diff: change, demo, tab, onTab }: { item: It
   // which files show their changes rather than themselves, where the owner chose; a changed one does at first
   const [asChanges, setAsChanges] = useState<Record<string, boolean>>({});
   const demoBox = useRef<HTMLDivElement>(null);
+  const codeBox = useRef<HTMLDivElement>(null);
   // what the shown files are as of now: the change read and the latest handover
   const rev = revision(`${item.state}:${item.need ?? ''}:${item.summary ?? ''}:${JSON.stringify(change?.files ?? [])}:${JSON.stringify(change?.folder?.changes ?? [])}`);
   // the column keeps the height of its tallest view so far: the card does not shrink and move under the list
@@ -56,24 +59,26 @@ export function ResultFiles({ item, diff: change, demo, tab, onTab }: { item: It
     const h = box.current?.offsetHeight ?? 0;
     if (h > tallest) setTallest(h);
   });
-  const first = demo ? DEMO : ((fold ? files.find((f) => f.caption !== undefined) : files[0])?.path ?? DEMO);
-  const current = tab !== null && (tab === DEMO ? !!demo : files.some((f) => f.path === tab)) ? tab : first;
+  const first = demo ? DEMO : codeVideo ? CODE_VIDEO : ((fold ? files.find((f) => f.caption !== undefined) : files[0])?.path ?? DEMO);
+  const current = tab !== null && (tab === DEMO ? !!demo : tab === CODE_VIDEO ? !!codeVideo : files.some((f) => f.path === tab)) ? tab : first;
   // a video left playing under another file would go on talking
   const shown = useRef(current);
   useEffect(() => {
     if (shown.current === current) return;
     shown.current = current;
     if (current !== DEMO) demoBox.current?.querySelectorAll('video').forEach((v) => v.pause());
+    if (current !== CODE_VIDEO) codeBox.current?.querySelectorAll('video').forEach((v) => v.pause());
   }, [current]);
   // a line picked brings its view into sight where it lies below the column's visible part, the line picked already too:
   // the click would otherwise seem to do nothing
   const [picked, setPicked] = useState(0);
   useEffect(() => {
     if (!picked) return;
-    const view = current === DEMO ? (demoBox.current?.querySelector('video, iframe') ?? demoBox.current) : box.current?.querySelector('.r-file');
+    const activeBox = current === DEMO ? demoBox.current : current === CODE_VIDEO ? codeBox.current : null;
+    const view = activeBox ? (activeBox.querySelector('video, iframe') ?? activeBox) : box.current?.querySelector('.r-file');
     if (view && !seen(view)) view.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [picked]);
-  if (!rows.length && !pending && !demo) return item.files && change ? <p className="hint">{t.files.none}</p> : null;
+  if (!rows.length && !pending && !demo && !codeVideo) return item.files && change ? <p className="hint">{t.files.none}</p> : null;
   const file = files.find((f) => f.path === current);
   // the size of the whole change stands with its files, not up in the card's branch line
   const count = change?.folder ? shownChanges(change.folder.changes).length : (change?.files.length ?? 0);
@@ -81,12 +86,13 @@ export function ResultFiles({ item, diff: change, demo, tab, onTab }: { item: It
   // the demo keeps its place in the page once the change is read: moved, it would start afresh and no longer play on its own
   return (
     <div className="results" ref={box} style={tallest ? { minHeight: tallest } : undefined}>
-      {rows.length + pending > 0 && (
+      {(rows.length + pending > 0 || codeVideo) && (
         <ChangeList
           item={item}
           rows={rows}
           pending={pending}
           demo={demoKind}
+          codeVideo={!!codeVideo}
           fold={fold}
           total={size}
           current={current}
@@ -99,7 +105,12 @@ export function ResultFiles({ item, diff: change, demo, tab, onTab }: { item: It
       )}
       {demo && (
         <div ref={demoBox} hidden={current !== DEMO}>
-          {demo}
+          {demo(current === DEMO)}
+        </div>
+      )}
+      {codeVideo && (
+        <div ref={codeBox} hidden={current !== CODE_VIDEO}>
+          {codeVideo(current === CODE_VIDEO)}
         </div>
       )}
       {/* a new handover (or the work going on) may change the file at the same path: its view is read afresh */}
@@ -135,6 +146,7 @@ export function ChangeList({
   rows,
   pending = 0,
   demo,
+  codeVideo,
   fold,
   total,
   current,
@@ -145,6 +157,7 @@ export function ChangeList({
   /** Lines of a change not read yet, empty until it is: as many as its size last read has beyond `rows`. */
   pending?: number;
   demo?: DemoKind | 'any';
+  codeVideo?: boolean;
   fold?: boolean;
   total?: { added: number; removed: number; files: number };
   current?: string;
@@ -159,16 +172,17 @@ export function ChangeList({
     onPick(path, changes);
   });
   const empty = Array.from({ length: pending }, (_, i): Pending => ({ pending: i }));
-  const lines: (ChangeRow | Pending | typeof DEMO)[] = [...(demo ? ([DEMO] as const) : []), ...rows, ...empty];
-  const at = (l: ChangeRow | Pending | typeof DEMO) => (l === DEMO ? DEMO : 'pending' in l ? null : l.path);
+  type VideoRow = typeof DEMO | typeof CODE_VIDEO;
+  const lines: (ChangeRow | Pending | VideoRow)[] = [...(demo ? ([DEMO] as const) : []), ...(codeVideo ? ([CODE_VIDEO] as const) : []), ...rows, ...empty];
+  const at = (l: ChangeRow | Pending | VideoRow) => (typeof l === 'string' ? l : 'pending' in l ? null : l.path);
   // folded, the result is the demo and the files the worker named; otherwise a line or two past the fold are shown rather than folded
-  const kept = fold ? lines.filter((l) => l === DEMO || ('path' in l && l.caption !== undefined)) : lines.slice(0, FOLD);
+  const kept = fold ? lines.filter((l) => typeof l === 'string' || ('path' in l && l.caption !== undefined)) : lines.slice(0, FOLD);
   const folds = fold ? kept.length < lines.length : lines.length > FOLD + 2;
   const visible = folds && !more ? lines.filter((l) => kept.includes(l) || at(l) === current) : lines;
   const hidden = lines.length - visible.length;
   const toggle = folds && (more || hidden > 0);
   // folded to the demo alone, the toggle counts the files, and the size beside it need not
-  const counted = toggle && !more && !visible.some((l) => l !== DEMO);
+  const counted = toggle && !more && !visible.some((l) => typeof l !== 'string');
   return (
     <div className="cl-list" role={pick ? 'tablist' : undefined}>
       <table>
@@ -180,12 +194,12 @@ export function ChangeList({
         </colgroup>
         <tbody>
           {visible.map((l, i) =>
-            l === DEMO ? (
-              <tr key="demo" className={current === DEMO ? 'cl-row on' : 'cl-row'} onClick={() => pick?.(DEMO)}>
+            typeof l === 'string' ? (
+              <tr key={l} className={current === l ? 'cl-row on' : 'cl-row'} onClick={() => pick?.(l)}>
                 <td />
                 <td className="cl-path">
-                  <button className="cl-name" role="tab" aria-selected={current === DEMO}>
-                    {t.files.demo[demo!]}
+                  <button className="cl-name" role="tab" aria-selected={current === l}>
+                    {l === CODE_VIDEO ? t.files.codeVideo : t.files.demo[demo!]}
                   </button>
                 </td>
                 <td />
@@ -203,7 +217,7 @@ export function ChangeList({
             ) : (
               <Fragment key={`${l.uncertain ? '?' : ''}${l.kind ?? ''}:${l.from ?? ''}:${l.path}`}>
                 {/* what may not be the card's stands apart, under a line of its own */}
-                {l.uncertain && !visible.slice(0, i).some((x) => x !== DEMO && 'path' in x && x.uncertain) && (
+                {l.uncertain && !visible.slice(0, i).some((x) => typeof x !== 'string' && 'path' in x && x.uncertain) && (
                   <tr className="cl-apart">
                     <td />
                     <td colSpan={3} title={t.folder.uncertainHint}>

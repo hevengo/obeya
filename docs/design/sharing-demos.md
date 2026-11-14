@@ -4,6 +4,10 @@ A chapter of the [design doc](../design.md), whose header says how it is written
 
 ### Sharing a demo
 
+Sharing covers the behaviour demo or artifact alone. A card's code video stays private on the
+owner's card: manual sharing, publishing on approval, contributor-facing pages and exports never
+include it or its chapters and captions. Its separate history does not change a shared page.
+
 Every demo, video or HTML artifact, has a compact "Share" button at the right end of its own line
 (see Earlier demos), on waiting, done and archived cards alike; prototypes are not shared. Once
 shared, the line holds the link, "Copy link" and "Stop sharing".

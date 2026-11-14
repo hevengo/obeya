@@ -49,6 +49,9 @@ Find out, from the files rather than by guessing:
   configuration on their machine ("Plan docs"), not into the file.
 - **Language**: the language the repository's code, docs and commit messages are written in
   (`language`), and the one its demos are to be narrated in (`demo.language`).
+- **Code-video lens**: the repository's design docs, layer and domain boundaries, and principles
+  the owner values. Use these to tailor the standard `demo.code` guidance that newly created or
+  added repositories receive, preserving an explicit setting or opt-out.
 
 ## 2. Ask what the repository does not tell
 
@@ -65,7 +68,9 @@ an environment variable), never itself.
 
 Start from the example in the reference and keep only the fields that differ from Obeya's
 defaults: `setup`, `checks`, `land`, `push`, `upstream`, `direct`, `autoMerge`, `planDocs`, `softPaths`, `workspaces`,
-`prNoise`, `language`, `app` with `run`, `stop` and `keep`, and `demo` with `language` and `site`.
+`prNoise`, `language`, `app` with `run`, `stop` and `keep`, and `demo` with `language`, `site` and optional private code-video guidance in `code`.
+
+`demo.code` guides a separate private code video after the behaviour demo. Newly added repositories get editable standard guidance. A blank value disables it. When enabled it is required for code-changing tasks and contributor reviews, and as a 30–60 second short form for prototypes; docs-only tasks need none. Only the behaviour demo is shared or exported.
 
 `app.run` is the part that decides whether workers can run and show their work. Write it for a
 newcomer, as a few sentences: what to start, in which order and how (in the background, which

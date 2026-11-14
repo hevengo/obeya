@@ -66,7 +66,7 @@ touches, and keep those current in the same change.
 - [Voice](design/voice.md) — voice in (dictating or sending, drafts, the microphone), speech
   recognition (Parakeet, Whisper, a cloud service, the settings), who hears the words, commands to
   the Coordinator with confirmation and undo, voice latency, voice out (walkthroughs only).
-- [Demos](design/demos.md) — making and showing demos: the demo skill, the demo settings and
+- [Demos](design/demos.md) — making and showing behaviour demos and code videos: the demo skill, the demo settings and
   voices, what a render needs, recording a demo (cutting waits, re-voicing, frames, highlights),
   the demo on the card (watching it, comments in the video, earlier demos), UI checks in a
   headless browser.

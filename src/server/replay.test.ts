@@ -139,10 +139,10 @@ test('a handover plays the recorded commits into the workspace of today and its 
       {
         name: 'ready_for_review',
         description: 'Hand over.',
-        schema: { summary: z.string(), demo: z.object({ dir: z.string() }).optional() },
+        schema: { summary: z.string(), demo: z.object({ dir: z.string() }).optional(), code_video: z.object({ dir: z.string() }).optional() },
         run: (args) => {
           const d = (args.demo as { dir: string }).dir;
-          calls.push({ ...args, log: git(join(dir, 'ws'), 'log', '--format=%s', 'main..HEAD'), video: readFileSync(join(d, 'demo.mp4'), 'utf8') });
+          calls.push({ ...args, log: git(join(dir, 'ws'), 'log', '--format=%s', 'main..HEAD'), video: readFileSync(join(d, 'demo.mp4'), 'utf8'), code: readFileSync(join((args.code_video as { dir: string }).dir, 'demo.mp4'), 'utf8') });
           return 'Handed over.';
         },
       },
@@ -163,7 +163,9 @@ test('a handover plays the recorded commits into the workspace of today and its 
   mkdirSync(join(a, 'demos', 'split', '.work'), { recursive: true });
   writeFileSync(join(a, 'demos', 'split', 'demo.mp4'), 'the video');
   writeFileSync(join(a, 'demos', 'split', '.work', 'frame.png'), 'a frame');
-  await fake.last.call('ready_for_review', { summary: 'Done.', demo: { dir: join(a, 'demos', 'split') } });
+  mkdirSync(join(a, 'demos', 'code'));
+  writeFileSync(join(a, 'demos', 'code', 'demo.mp4'), 'code video');
+  await fake.last.call('ready_for_review', { summary: 'Done.', demo: { dir: join(a, 'demos', 'split') }, code_video: { dir: join(a, 'demos', 'code') } });
   fake.last.emit({ type: 'idle' });
   expect(then[0]).toMatchObject({ log: 'Split the bill', video: 'the video' });
 
@@ -177,7 +179,7 @@ test('a handover plays the recorded commits into the workspace of today and its 
   const events: AgentEvent[] = [];
   replayRuntime(rec, { home: join(b, 'home'), log: () => {} }).start(worker(b, now, events), 'Build it.');
   await until(() => events.some((e) => e.type === 'idle'));
-  expect(now).toEqual([{ summary: 'Done.', demo: { dir: join(b, 'demos', 'split') }, log: 'Split the bill', video: 'the video' }]);
+  expect(now).toEqual([{ summary: 'Done.', demo: { dir: join(b, 'demos', 'split') }, code_video: { dir: join(b, 'demos', 'code') }, log: 'Split the bill', video: 'the video', code: 'code video' }]);
   expect(readFileSync(join(b, 'ws', 'split.js'), 'utf8')).toContain('bill / people');
   // the demo's work files stay out of the recording
   expect(existsSync(join(b, 'demos', 'split', '.work'))).toBe(false);

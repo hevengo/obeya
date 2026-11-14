@@ -186,7 +186,7 @@ Each of the three is a setting of its own: this machine may set one and leave th
 repository. `stop` and `keep` from the file run only once you trusted them (see Commands you trust).
 Default: none.
 
-### `demo` — `{ language?, site? }`
+### `demo` — `{ language?, code?, site? }`
 
 Demos: every handover brings one, a narrated video recorded with Obeya's demo skill or an HTML
 page for something to look at; the worker picks which, and runs the app for it as `app.run` says.
@@ -197,6 +197,29 @@ page for something to look at; the worker picks which, and runs the app for it a
   Obeya gives it to its workers as `DEMO_LANGUAGE`, which the demo skill reads; a session without
   Obeya finds it in the repository's `.obeya/settings.json`. A voice that clones a clip uses the
   clip of this language, so each machine's demo settings name one per language.
+
+- `code`: prose enabling a second, private video for code-changing tasks, contributor reviews
+  and prototypes. When a git repository is created or added through Obeya, it starts with standard
+  guidance on this machine unless it already sets this field locally or in its shared settings.
+  The guidance covers architecture, responsibilities, dependencies, boundaries, pattern choices,
+  alternatives and evidence. Existing repositories keep their settings. In Configuration, an empty
+  "Code video" field offers "Set default" to fill in this guidance; edit it as needed and save.
+  Describe what
+  the owner looks for in patterns, architecture and domain boundaries, and point to the repository's
+  design docs. For example: `"Explain the boundaries in docs/design.md and why each pattern fits.
+  Prefer simple designs without speculative abstraction."` An absent or blank value leaves this off;
+  a blank value on this machine overrides an enabled repository value. Like `app.run`, it is prose
+  passed to the worker, not a command or a list of switches. Configuration shows it as "Code video",
+  and "Take over into the repository for everyone" saves it with the other repository settings.
+
+  An enabled task hands over the behaviour demo or artifact and a separate code video covering the
+  complete card change. Reviews tour the contributor’s merge-base-to-head change and locate findings;
+  prototypes use a 30–60 second tour of the approach, structure, carry-forward parts and shortcuts.
+  Docs-only tasks need no code video. After feedback the worker may keep
+  either earlier video independently. The code video uses the same language, voice, captions and
+  chapters, but starts only when played. It stays on the owner's card; shared pages, automatic
+  publishing and exports include only the behaviour demo. Directly requesting a code video with
+  the demo skill works without enabling this setting.
 
 - `site`: a static site Obeya keeps and deploys itself, so that "Share" puts a demo on a page for
   colleagues, for a host that takes a directory (Cloudflare Pages, Netlify, an S3 bucket, a

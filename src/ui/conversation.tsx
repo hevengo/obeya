@@ -690,7 +690,7 @@ function PlaceChip({ cardId, place }: { cardId: string; place: Place }) {
     <div className="quote place" title={t.demo.place}>
       <canvas ref={frame} className="place-frame" />
       <span className="place-text">
-        <b>{mmss(place.at)}</b>
+        <b>{place.video === 'code' ? t.files.codeVideo : t.files.demo.video} · {mmss(place.at)}</b>
         {place.chapter && ` · ${place.chapter}`}
       </span>
       <button className="quote-clear" title={t.demo.unplace} aria-label={t.demo.unplace} onMouseDown={(m) => m.preventDefault()} onClick={dismissPlace}>
@@ -703,10 +703,10 @@ function PlaceChip({ cardId, place }: { cardId: string; place: Place }) {
 /** Above the owner's words in the conversation: the place in the demo video they are about; a click plays the video from there. */
 function SpotLink({ cardId, spot }: { cardId: string; spot: Spot }) {
   return (
-    <button className="spot" title={t.demo.toPlace} onClick={() => seekTo(cardId, spot.at, spot.demo)}>
+    <button className="spot" title={t.demo.toPlace} onClick={() => seekTo(cardId, spot.at, spot.demo, spot.video)}>
       {spot.still && <img src={imageUrl(spot.still)} alt="" loading="lazy" />}
       <span>
-        ▶ {mmss(spot.at)}
+        ▶ {spot.video === 'code' ? t.files.codeVideo : t.files.demo.video} · {mmss(spot.at)}
         {spot.chapter && ` · ${spot.chapter}`}
       </span>
     </button>

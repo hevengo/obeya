@@ -184,6 +184,8 @@ function work(r: CardRow, themeNow?: ThemeNow): Partial<Item> {
   const detail = fromJson(r.detail) ?? {};
   const demo = r.demo ? shownDemo(fromJson(r.demo)) : undefined;
   const earlier = demo ? earlierDemos(r) : [];
+  const codeVideo = r.code_video ? shownDemo(JSON.parse(r.code_video) as StoredDemo) : undefined;
+  const codeVideos = codeVideo ? earlierDemos({ ...r, demo: r.code_video, demos: r.code_videos }) : [];
   const handed = r.need === 'review' || r.need === 'demo';
   const answering = detail.answering && handed;
   const scope = fromJson(r.scope)?.files;
@@ -195,6 +197,8 @@ function work(r: CardRow, themeNow?: ThemeNow): Partial<Item> {
   const landed = fromJson(r.landed);
   const revoke = revocable(r);
   return {
+    ...(codeVideo ? { codeVideo } : {}),
+    ...(codeVideos.length ? { codeVideos } : {}),
     ...(scope?.length ? { scope } : {}),
     ...(r.upstream ? { upstream: true as const } : {}),
     ...(r.adopted ? { adopted: fromJson(r.adopted) } : {}),

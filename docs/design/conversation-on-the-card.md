@@ -243,7 +243,10 @@ The change list at the top of the column is also its row of tabs, so each file s
 per file with its sign (＋ added, ✎ changed, ↪ moved or renamed, ✕ deleted), its path cut at the
 front so the name stays, its lines added and removed, and on a folder card what discarding would
 leave. The demo comes first, named by its kind ("Demo video", "Demo artifact"; "Demo" where the
-card's demos are of both), without a play mark. Then the files the worker named at its handover
+card's demos are of both), without a play mark. A private "Code video" row follows when one was
+handed over. Both rows use the same player and expose their own chapter, caption and version
+controls; only the behaviour demo starts automatically. Switching rows pauses the previous video,
+and a timed comment names its video and version when opening it again. Then the files the worker named at its handover
 (`ready_for_review`'s `files`, the caption under the path), then other changed files that can be
 shown, documents first; last, greyed and not to be picked, deleted files, directories and files that
 are neither documents nor text (their line counts still open their diff). The line picked is marked
@@ -251,7 +254,7 @@ like a tab; a click on a line shows its file below, a click on its line counts i
 Where what a click picked (the line marked already too) lies out of sight, below the column's
 visible part or under the card's buttons in a low window, the click scrolls it into view: otherwise
 it seemed to do nothing. Beside a demo, and while the agent is at work (working, stopped, or
-asking), the list shows the demo and the named files only, the other changed files folded under "N
+asking), the list shows the videos and the named files only, the other changed files folded under "N
 changed files ▾" (or "and N more ▾" below named files), and no file is picked until the owner picks
 one; handed over without a demo, the list is open and its first file shows, so there is always a
 result to see. Unfolded, past eight lines "and N more ▾" unfolds the rest. The file picked stays in

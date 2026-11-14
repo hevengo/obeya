@@ -1,0 +1,2 @@
+/** The starting guidance for private code videos, editable in each repository's settings. */
+export const DEFAULT_CODE_VIDEO = 'Explain how the change fits the repository’s architecture, using its instructions and design docs. Show the affected domains and layers, their responsibilities, dependencies and boundaries. Explain important pattern choices, alternatives and trade-offs, with evidence from the code and existing precedents. Identify design concerns and distinguish documented intent from inference.';

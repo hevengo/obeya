@@ -64,7 +64,7 @@ const talkInAddress = () => new URLSearchParams(location.search).has('talk');
 /** What a step in the browser's history opened: a card, or the conversation of what is in view. */
 type Step = 'card' | 'talk';
 /** The open card's demo video, on its page. */
-const pageVideo = () => document.querySelector<HTMLVideoElement>('#ph-card .demo-view video');
+const pageVideo = () => [...document.querySelectorAll<HTMLVideoElement>('#ph-card .demo-view video')].find((v) => !v.closest('[hidden]'));
 
 /**
  * The keyboard makes the page shorter (`interactive-widget`), as Chrome on Android does with it: the

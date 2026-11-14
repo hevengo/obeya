@@ -1,3 +1,4 @@
+import { DEFAULT_CODE_VIDEO } from '../core/code-video';
 // Obeya's configuration: the canvases it serves, saved in `canvases.json` under its home. The owner
 // reads and edits it in its sheet, the Coordinator on their word. A saved change applies while
 // Obeya runs (`Canvases.apply`, see Live configuration in
@@ -55,7 +56,7 @@ function tidySettings(s: z.infer<typeof settingsShape> | undefined): RepoSetting
   const list = (l?: string[]) => l?.map((x) => x.trim()).filter(Boolean);
   const dir = s.planDocs?.dir.trim().replace(/\/+$/, '');
   const site = tidySite(s.demo?.site);
-  const demo = { ...(site ? { site } : {}), ...(s.demo?.language ? { language: s.demo.language } : {}) };
+  const demo = { ...(site ? { site } : {}), ...(s.demo?.language ? { language: s.demo.language } : {}), ...(s.demo?.code !== undefined ? { code: s.demo.code.trim() } : {}) };
   // what is not normalised here goes as it came
   const out: RepoSettings = {
     ...s,
@@ -493,6 +494,17 @@ export class Config {
       readRepos(repos),
       Promise.all(branches.map(async (b) => [`${b.path}\0${b.branch}`, await hasBranch(b.path, b.branch)] as const)).then((x) => new Map(x)),
     ]);
+    // Seed only newly added repositories. Existing choices, including an explicit blank, stand.
+    const known = new Set(expandConfig(this.current()).flatMap((c) => c.repos.map((r) => resolve(r.path))));
+    const codeDefaults = new Set<string>();
+    expanded.forEach((c, i) => c.repos.forEach((r, j) => {
+      const path = resolve(r.path);
+      const read = reads.repos.get(path)?.read;
+      if (r.git === false || !read || known.has(path) || r.settings?.demo?.code !== undefined || read.shared.settings?.demo?.code !== undefined) return;
+      r.settings = layerSettings(r.settings, { demo: { code: DEFAULT_CODE_VIDEO } });
+      canvases[i]!.repos[j]!.settings = r.settings;
+      codeDefaults.add(path);
+    }));
     // a workspace needs only to be a git repository
     const isRepo = (path: string) => !!reads.workspaces.get(path);
     /** The `origin` of a workspace that is a git repository. */
@@ -570,7 +582,11 @@ export class Config {
             workspaces: adapter.workspaces,
             ...(got.info.folder ? { folder: true as const } : {}),
             ...(got.adapterModule ? { adapterGone: true } : {}),
-            values: markHeld(values(), trust),
+            values: (() => {
+              const value = markHeld(values(), trust);
+              if (codeDefaults.has(resolve(r.path))) value.demo.code = { value: DEFAULT_CODE_VIDEO, source: 'default' };
+              return value;
+            })(),
             ...(trust ? { trust } : {}),
             shareTo: adapter.land === 'main' ? 'main' : 'pr',
             ...(adapter.land === 'pr' && adapter.direct ? { shareDirect: true } : {}),

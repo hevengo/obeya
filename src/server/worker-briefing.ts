@@ -199,6 +199,7 @@ ${idea.idea.brief}` : '',
         "Where the work itself is a file for the owner (a document, a report, a spreadsheet in the repository), name it in ready_for_review's files: the card shows it beside the demo.",
       ].join(' '),
     );
+    parts.push(this.codeVideoBrief(card));
     return parts.join('\n\n');
   }
 
@@ -207,6 +208,19 @@ ${idea.idea.brief}` : '',
    * diff read for anything that reaches beyond the repository before any of it runs), the handover
    * with its results, and where the owner's change requests go.
    */
+  /** The opted-in tour shares the handover and player; only its scope varies by card. */
+  private codeVideoBrief(card: Item): string {
+    const guidance = this.o.adapter.demo?.code?.trim();
+    if (!guidance) return '';
+    const scope = card.contribution
+      ? 'After reviewing and making the behaviour demo, tour the contributor’s change from merge base to the PR head. Locate each review finding in the tour. A design problem needing a decision is a finding too: record it through findings, where the owner decides, rather than as a separate demo question.'
+      : card.prototypeOf
+        ? 'After the behaviour demo, make a 30–60 s code video showing the approach and structure, what would carry into a build on this branch and what is a shortcut. Keep the limited prototype brief; the tour does not call for tests, polish or production work.'
+        : "After the behaviour demo, tour this card's complete branch change from its base, not only the latest commit. Docs-only changes need none.";
+    return `${scope} Make the separate code video with ${this.demoSkill(card.id)} in code-video mode, and supply code_video (dir and chapters) in ready_for_review. After feedback you may keep the earlier code video or record another, as appropriate.${card.contribution ? ' On a new contributor head, check that the tour still covers the reviewed change and findings and update it where needed.' : ''} The owner watches and comments on it on the card; it stays private when the behaviour demo is shared or exported, and never goes to the contributor. Repository guidance for the tour:\n${guidance}`;
+  }
+
+
   private reviewBriefing(card: Item, c: StoredContribution, branch: string, resumed: boolean, headProblem?: string | null): string {
     const source = this.w.prSource(c);
     const ref = `refs/pull/${c.number}/head`;
@@ -243,6 +257,7 @@ ${idea.idea.brief}` : '',
         'Words of the owner\'s that ask the same in so many words (“send them finding 1”, “fix that yourself”) count the same. Anything else they say (a question, more to look at) you answer or do on the card, and nothing goes to the PR.',
       ].join('\n'),
     ];
+    parts.push(this.codeVideoBrief(card));
     return parts.filter(Boolean).join('\n\n');
   }
 

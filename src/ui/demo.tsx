@@ -2,7 +2,7 @@
 
 import { type ReactNode, type RefObject, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Demo, EarlierDemo, Item } from '../core/types';
+import type { Demo, EarlierDemo, Item, VideoKind } from '../core/types';
 import { chapterAt } from '../core/card';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { languageName, preferredTrack } from '../core/locale';
@@ -16,7 +16,7 @@ import { captionPages, cueWords, pageOf, spokenWord } from '../core/caption-page
 import { CAPTIONS_CHANGED, PLAYER_ICONS, PLAYER_KEYS, type PlayerWords, SEEK_KEYS_KNOWN, videoPlayer } from '../core/video-player';
 import { zoomedBox } from './walkthrough';
 import { plainKey, useZoom } from './zoom';
-import { showsVersions, watch } from './spot';
+import { playAt, showsVersions, watch } from './spot';
 import { clock as time, shortDay, t, uiLanguage } from './strings';
 import { TalkElsewhere } from './conversation';
 import { ShareIcon } from './share';
@@ -38,6 +38,9 @@ export function DemoView({
   top,
   autoplay = true,
   comments = false,
+  videoKind = 'demo',
+  active = true,
+  onShow,
 }: {
   item: Item;
   summary?: string;
@@ -48,31 +51,35 @@ export function DemoView({
   /** starts by itself when this browser has not played it yet */
   autoplay?: boolean;
   comments?: boolean;
+  videoKind?: VideoKind;
+  active?: boolean;
+  onShow?: () => void;
 }) {
   const cardId = item.id;
-  const shown = useShownDemo(item, latest);
+  const shown = useShownDemo(item, latest, videoKind, onShow);
   const { demo } = shown;
   // start once the card has unfolded, like the mock, until it has played once; a demo kept on a finished card waits to be played.
   // A page out of sight (a tab in the background, an agent's browser) does not start it: nobody would see it, only hear it
   // the demo the card opened to: a later handover on the open card never starts by itself
   const [opened] = useState(latest);
-  const [autostart] = useState(() => autoplay && latest.kind !== 'html' && !document.hidden && unseen(localStorage, cardId, latest));
+  const [autostart] = useState(() => active && videoKind === 'demo' && autoplay && latest.kind !== 'html' && !document.hidden && unseen(localStorage, cardId, latest));
   // a new handover often renders into the same directory: its handover in the address makes a card left open load it afresh
-  const src = (f: string) => cardAt(cardId, `${shown.latest ? `/demo/${f}` : `/demos/${(demo as EarlierDemo).n}/${f}`}${demo.handover === undefined ? '' : `?v=${demo.handover}`}`);
+  const route = videoKind === 'code' ? ['code-video', 'code-videos'] : ['demo', 'demos'];
+  const src = (f: string) => cardAt(cardId, `${shown.latest ? `/${route[0]}/${f}` : `/${route[1]}/${(demo as EarlierDemo).n}/${f}`}${demo.handover === undefined ? '' : `?v=${demo.handover}`}`);
   return (
     <>
-      <div className="demo-view">
+      <div className="demo-view" data-video-kind={videoKind}>
         {/* which of the card's demos is shown, in the line with sharing */}
         {(shown.all.length > 1 || top) && (
           <div className="demo-top">
-            {shown.all.length > 1 && <DemoVersions item={item} shown={shown} />}
+            {shown.all.length > 1 && <DemoVersions item={item} shown={shown} videoKind={videoKind} />}
             {top && top(demo, shown.latest)}
           </div>
         )}
         {demo.kind === 'html' ? (
           <Artifact src={src('index.html')} />
         ) : (
-          <DemoPlayer cardId={cardId} demo={demo} src={src} latest={shown.latest} autoplay={autostart && !shown.moved && sameDemo(opened, latest)} comments={comments} playFrom={shown.playFrom} />
+          <DemoPlayer cardId={cardId} demo={demo} src={src} latest={shown.latest} autoplay={autostart && !shown.moved && sameDemo(opened, latest)} comments={comments} playFrom={shown.playFrom} seek={shown.seek} active={active} videoKind={videoKind} />
         )}
         {/* its report's question stands in the conversation, where it is answered */}
         {children}
@@ -88,53 +95,57 @@ export function DemoView({
  * then plays from that place (`playFrom`, which the player takes once). `moved`: the owner went to
  * another of the card's demos since it opened.
  */
-function useShownDemo(item: Item, latest: Demo) {
+function useShownDemo(item: Item, latest: Demo, videoKind: VideoKind, onShow?: () => void) {
   // the earlier demo shown (its `n`), or the latest
   const [shownN, setShownN] = useState<number | null>(null);
   const [moved, setMoved] = useState(false);
   const playFrom = useRef<number | null>(null);
-  const earlier = item.demos ?? [];
+  const [seek, setSeek] = useState(0);
+  const earlier = (videoKind === 'code' ? item.codeVideos : item.demos) ?? [];
   const demo = earlier.find((d) => d.n === shownN) ?? latest;
   const all = [...earlier, latest];
-  const show = (d: Demo) => {
+  const show = (d: Demo, from: number | null = null) => {
+    playFrom.current = from;
+    setSeek((n) => n + 1);
     setMoved(true);
     setShownN(d === latest ? null : (d as EarlierDemo).n);
   };
   useEffect(() => {
-    if (!earlier.length) return;
     return showsVersions({
       cardId: item.id,
+      videoKind,
+      activate: onShow,
       shown: demo.handover,
       show: (handover, from) => {
-        const d = all.find((d) => d.handover === handover);
+        const d = handover === undefined ? latest : all.find((d) => d.handover === handover);
         if (!d) return false;
-        playFrom.current = from;
-        show(d);
+        show(d, from);
         return true;
       },
     });
-  }, [demo, latest, item.demos]);
-  return { demo, all, at: all.indexOf(demo), latest: demo === latest, show, playFrom, moved };
+  }, [demo, latest, item.demos, item.codeVideos, onShow, videoKind]);
+  return { demo, all, at: all.indexOf(demo), latest: demo === latest, show, playFrom, moved, seek };
 }
 
 /** The line above a demo that a later handover replaced: which of the card's demos shows, with steps back and forth. */
-function DemoVersions({ item, shown }: { item: Item; shown: ReturnType<typeof useShownDemo> }) {
+function DemoVersions({ item, shown, videoKind }: { item: Item; shown: ReturnType<typeof useShownDemo>; videoKind: VideoKind }) {
   const { demo, all, at, latest, show } = shown;
+  const historyWords = videoKind === 'code' ? { version: t.demo.codeVersion, older: t.demo.codeOlder, newer: t.demo.codeNewer } : t.demo;
   return (
     <div className={latest ? 'demo-versions' : 'demo-versions earlier'} title={latest ? undefined : t.demo.earlierHint}>
-      <button className="step" disabled={at === 0} title={t.demo.older} aria-label={t.demo.older} onClick={() => show(all[at - 1]!)}>
+      <button className="step" disabled={at === 0} title={historyWords.older} aria-label={historyWords.older} onClick={() => show(all[at - 1]!)}>
         ‹
       </button>
       <span>
-        {t.demo.version(at + 1, all.length, latest)}
+        {historyWords.version(at + 1, all.length, latest)}
         {demo.at && ` · ${handedAt(demo.at)}`}
-        {demo.handover !== undefined && item.share?.on?.includes(demo.handover) && (
+        {videoKind === 'demo' && demo.handover !== undefined && item.share?.on?.includes(demo.handover) && (
           <span className="on-page" title={t.share.onPageMark} aria-label={t.share.onPageMark}>
             <ShareIcon />
           </span>
         )}
       </span>
-      <button className="step" disabled={latest} title={t.demo.newer} aria-label={t.demo.newer} onClick={() => show(all[at + 1]!)}>
+      <button className="step" disabled={latest} title={historyWords.newer} aria-label={historyWords.newer} onClick={() => show(all[at + 1]!)}>
         ›
       </button>
       {at < all.length - 2 && (
@@ -171,6 +182,9 @@ function DemoPlayer({
   autoplay,
   comments,
   playFrom,
+  seek,
+  active,
+  videoKind,
 }: {
   cardId: string;
   demo: Demo;
@@ -179,6 +193,9 @@ function DemoPlayer({
   autoplay: boolean;
   comments: boolean;
   playFrom: RefObject<number | null>;
+  seek: number;
+  active: boolean;
+  videoKind: VideoKind;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   // on the phone the field is in a panel of its own, which a comment brings up
@@ -189,11 +206,13 @@ function DemoPlayer({
   const [shape, setShape] = useState<string>();
   // a video that does not start on its own shows a big play button over it until it first plays
   const [started, setStarted] = useState(autoplay);
+  const autoPending = useRef(autoplay);
   useEffect(() => {
-    if (!autoplay) return;
-    const h = setTimeout(() => (document.hidden ? setStarted(false) : video.current?.play().catch(() => setStarted(false))), 300);
+    if (!autoPending.current) return;
+    if (!active) { autoPending.current = false; return; }
+    const h = setTimeout(() => { autoPending.current = false; if (document.hidden) setStarted(false); else video.current?.play().catch(() => setStarted(false)); }, 300);
     return () => clearTimeout(h);
-  }, []);
+  }, [active]);
   useEffect(() => () => holdRestart('video', null), []);
   // which demo it is: an earlier one by its place, the latest by its handover and render
   const mark = latest ? demoMark(demo) : `n${(demo as EarlierDemo).n}`;
@@ -201,9 +220,12 @@ function DemoPlayer({
   // play button, or from the place a comment took the owner to (also where that put the player in
   // place of an HTML artifact)
   const shownMark = useRef<string | null>(null);
+  const cancelSeek = useRef<(() => void) | null>(null);
   useEffect(() => {
+    cancelSeek.current?.();
+    cancelSeek.current = null;
     const first = shownMark.current === null;
-    if (shownMark.current === mark) return;
+    if (shownMark.current === mark && playFrom.current === null) return;
     shownMark.current = mark;
     const from = playFrom.current;
     playFrom.current = null;
@@ -212,18 +234,15 @@ function DemoPlayer({
     const v = video.current;
     if (!v) return;
     if (from === null) return setStarted(false);
-    const go = () => {
-      v.currentTime = from;
-      v.play().catch(() => setStarted(false));
-    };
-    if (v.readyState >= 1) go();
-    else v.addEventListener('loadedmetadata', go, { once: true });
+    const cancel = playAt(v, from, () => setStarted(false));
+    cancelSeek.current = cancel;
     // into view with the line above it, unless its top is in view already
     const column = v.closest('.split-main')?.getBoundingClientRect();
     const top = v.getBoundingClientRect().top;
     if (column && (top < column.top || top > column.bottom - 80)) v.closest('.demo-view')?.querySelector('.demo-versions')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    return () => v.removeEventListener('loadedmetadata', go);
-  }, [mark]);
+    return cancel;
+  }, [mark, seek]);
+  useEffect(() => { if (!active) { cancelSeek.current?.(); cancelSeek.current = null; video.current?.pause(); playFrom.current = null; } }, [active]);
   const zoom = useZoom<HTMLElement>({
     // the picture as large as fits with the caption, while it shows, and the controls under it
     box: (w, h) => {
@@ -253,7 +272,7 @@ function DemoPlayer({
       setSlot(null);
     };
   }, [mark, JSON.stringify(demo.chapters), demo.tracks?.join(), demo.silent]);
-  const watching = useWatching(cardId, video, comments ? demo.chapters : null, demo.handover);
+  const watching = useWatching(cardId, video, comments ? demo.chapters : null, demo.handover, videoKind, active);
   const current = chapterAt(demo.chapters, now);
   return (
     <>
@@ -282,7 +301,7 @@ function DemoPlayer({
                 holdRestart('video', 'video');
               }}
               // played once it runs, not while it still loads after the click: closed before that, it starts at the next opening
-              onPlaying={() => latest && markSeen(localStorage, cardId, demo)}
+              onPlaying={() => videoKind === 'demo' && latest && markSeen(localStorage, cardId, demo)}
               onPause={() => holdRestart('video', null)}
               onEnded={() => {
                 holdRestart('video', null);
@@ -416,18 +435,18 @@ const STOOD_MS = 3 * 60_000;
  * they watch, go to the agent once they have finished: the video ended, stood for a few minutes, or
  * the card closed. Words without a place, and an approval, take them too (on the server).
  */
-function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, chapters: [number, string][] | null, demo?: number) {
+function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, chapters: [number, string][] | null, demo?: number, videoKind: VideoKind = 'demo', active = true) {
   const on = !!chapters;
   const release = () => void api.act(cardId, { action: 'release' }).catch(() => {});
   // going to another of the card's demos is no sign the owner has finished watching
   useEffect(() => {
     const v = video.current;
-    if (!on || !v) return;
-    return watch(cardId, v, chapters, demo);
-  }, [on, demo]);
+    if (!on || !active || !v) return;
+    return watch(cardId, v, chapters, demo, videoKind);
+  }, [on, demo, videoKind, active]);
   useEffect(() => {
     const v = video.current;
-    if (!on || !v) return;
+    if (!on || !active || !v) return;
     const typed = (e: Event) => {
       if (!v.paused && e.target instanceof HTMLTextAreaElement && e.target.closest('.card-sheet .split-talk .composer, #ph-card-talk .composer')) v.pause();
     };
@@ -445,15 +464,15 @@ function useWatching(cardId: string, video: RefObject<HTMLVideoElement | null>, 
       v.removeEventListener('pause', paused);
       v.removeEventListener('play', played);
       removeEventListener('input', typed, true);
-      release();
     };
-  }, [on]);
+  }, [on, active]);
+  useEffect(() => () => { if (on) release(); }, [on]);
   return { ended: () => on && release() };
 }
 
 /** The demo video the keys are for, with several on a card: the zoomed one, else the one playing, else the first. */
 function keyedVideo() {
-  const videos = [...document.querySelectorAll<HTMLVideoElement>('.card-sheet .demo-view video')];
+  const videos = [...document.querySelectorAll<HTMLVideoElement>('.card-sheet .demo-view video')].filter((v) => !v.closest('[hidden]'));
   return document.querySelector<HTMLVideoElement>('.dp.zoomed video') ?? videos.find((v) => !v.paused) ?? videos[0];
 }
 

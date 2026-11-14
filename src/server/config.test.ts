@@ -1,3 +1,4 @@
+import { DEFAULT_CODE_VIDEO } from '../core/code-video';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -229,7 +230,7 @@ describe("Obeya's configuration", () => {
       ]);
       expect(missing.problems.some(blocksSaving)).toBe(false);
       // never among the settings "Take over into the repository for everyone" commits
-      expect(ok.canvases[0]!.repos[0]!.settings).toBeUndefined();
+      expect(ok.canvases[0]!.repos[0]!.settings).toEqual({ demo: { code: DEFAULT_CODE_VIDEO } });
     } finally {
       if (was === undefined) delete process.env.GH_CONFIG_DIR;
       else process.env.GH_CONFIG_DIR = was;
@@ -277,13 +278,67 @@ describe("Obeya's configuration", () => {
     expect(restarts).toBe(0);
 
     expect((await c.save([{ name: ' ', repos: [{ path: web, workspaces: [' '], clones: 0 }, { path: api, clones: 2 }] }]))).toEqual({ restarting: true });
-    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([{ repos: [{ path: web }, { path: api, clones: 2 }] }]);
-    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api, clones: 2 }] }]);
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual([{ repos: [{ path: web }, { path: api, clones: 2, settings: { demo: { code: DEFAULT_CODE_VIDEO } } }] }]);
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api, clones: 2, settings: { demo: { code: DEFAULT_CODE_VIDEO } } }] }]);
     expect(restarts).toBe(1);
     expect(c.view().restarting).toBe(true);
     // saved again before the restart: the file has the latest, and the restart is already on its way
     (await c.save([{ repos: [{ path: api }] }]));
     expect(restarts).toBe(1);
+  });
+
+  test('code-video prose is saved, can be disabled locally, and transfers to repository settings', async () => {
+    mkdirSync(join(dir, 'home'));
+    writeFileSync(file, JSON.stringify([{ repos: [{ path: web }] }]));
+    const c = config('file', [{ repos: [{ path: web }] }]);
+    await c.save([{ repos: [{ path: web, settings: { demo: { code: '  Explain the boundaries.  ', language: 'en' } } }] }]);
+    expect(c.repoSettings(web)?.demo).toEqual({ code: 'Explain the boundaries.', language: 'en' });
+    await c.shareSettings({ path: web });
+    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json')).demo).toEqual({ code: 'Explain the boundaries.', language: 'en' });
+    expect((await c.checkSaved()).resolved[0]!.repos[0]!.values.demo.code).toEqual({ value: 'Explain the boundaries.', source: 'repository' });
+    await c.save([{ repos: [{ path: web, settings: { demo: { code: ' ' } } }] }]);
+    expect(c.repoSettings(web)?.demo).toEqual({ code: '' });
+  });
+
+  test('new repositories preview and save code-video guidance without changing existing repositories', async () => {
+    const c = config('file', [{ repos: [{ path: web }] }]);
+    const draft = [{ repos: [{ path: web }, { path: api }] }];
+    const checked = await c.check(draft);
+    expect(checked.resolved[0]!.repos.map((r) => r.values.demo.code)).toEqual([
+      { value: '', source: 'default' },
+      { value: DEFAULT_CODE_VIDEO, source: 'default' },
+    ]);
+    expect(draft).toEqual([{ repos: [{ path: web }, { path: api }] }]);
+    await c.save(checked.canvases);
+    expect(c.repoSettings(web)?.demo?.code).toBeUndefined();
+    expect(c.repoSettings(api)?.demo?.code).toBe(DEFAULT_CODE_VIDEO);
+    const edited = structuredClone(checked.canvases);
+    edited[0]!.repos[1]!.settings!.setup = 'echo ready';
+    await c.save(edited);
+    expect(c.repoSettings(api)).toEqual({ setup: 'echo ready', demo: { code: DEFAULT_CODE_VIDEO } });
+    // Moving an existing repository to another canvas does not enable a video.
+    await c.save([{ repos: [{ path: api }] }, { repos: [{ path: `${web}/` }] }]);
+    expect(c.repoSettings(web)?.demo?.code).toBeUndefined();
+    // Clearing the new setting remains an explicit opt-out after the next save.
+    await c.save([{ repos: [{ path: api, settings: { demo: { code: '' } } }] }]);
+    expect(c.repoSettings(api)?.demo?.code).toBe('');
+  });
+
+  test('new repositories retain explicit code-video choices and folders get none', async () => {
+    const custom = repo('custom');
+    const off = gitRepo(join(dir, 'off'), { '.obeya/settings.json': JSON.stringify({ demo: { code: '' } }) });
+    const shared = gitRepo(join(dir, 'shared'), { '.obeya/settings.json': JSON.stringify({ demo: { code: 'Explain the data boundary.' } }) });
+    const folder = join(dir, 'folder');
+    mkdirSync(folder);
+    const c = config('file', []);
+    await c.save([{ repos: [
+      { path: web, settings: { demo: { code: '', language: 'en' } } },
+      { path: custom, settings: { demo: { code: 'Explain the API.' } } },
+      { path: off }, { path: shared }, { path: folder, git: false },
+    ] }]);
+    expect(c.repoSettings(web)?.demo).toEqual({ code: '', language: 'en' });
+    expect(c.repoSettings(custom)?.demo?.code).toBe('Explain the API.');
+    for (const path of [off, shared, folder]) expect(c.repoSettings(path)?.demo?.code).toBeUndefined();
   });
 
   test("a file from before demo.language reads without its site's language, the site kept", async () => {
@@ -469,11 +524,11 @@ describe("Obeya's configuration", () => {
     // saved with the site, as the dialog has them
     const tags = { Area: ['Billing', 'Reports'], Kind: ['Fix'] };
     await c.save([{ repos: [{ path: web, settings: { demo: { site: { ...site, tags } } } }] }]);
-    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { demo: { site: { ...site, tags } } } }] }]);
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web, settings: { demo: { site: { ...site, tags }, code: DEFAULT_CODE_VIDEO } } }] }]);
 
     const done = await c.shareSettings({ path: web });
     expect(done).toEqual({ committed: git(web, 'rev-parse', 'main').trim(), branch: 'main' });
-    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ land: 'main', demo: { language: 'en', site: { ...site, tags } } });
+    expect(JSON.parse(git(web, 'show', 'main:.obeya/settings.json'))).toEqual({ land: 'main', demo: { language: 'en', site: { ...site, tags }, code: DEFAULT_CODE_VIDEO } });
     expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }] }]);
 
     // this machine sets what the file holds already (in another order): no empty commit, and its values go
@@ -693,7 +748,7 @@ describe('the configuration over HTTP', () => {
     expect(refused).toMatchObject({ status: 400, body: { code: 'config' } });
 
     expect((await call('PUT', '/api/config', [{ repos: [{ path: web }, { path: api }] }])).body).toEqual({ restarting: true });
-    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api }] }]);
+    expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api, settings: { demo: { code: DEFAULT_CODE_VIDEO } } }] }]);
   });
 
   test('makes the card that fills in the settings of a repository, once while it is open', async () => {
@@ -856,7 +911,7 @@ describe('a change the Coordinator makes', () => {
       k.emit({ type: 'idle' });
       canvas.commander.arm((await heard).token!);
       await until(() => readConfigFile(file).length === 2 && readConfigFile(file)[0]!.repos.length === 2);
-      expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api }] }, { repos: [{ path: docs, git: false }] }]);
+      expect(readConfigFile(file)).toEqual([{ repos: [{ path: web }, { path: api, settings: { demo: { code: DEFAULT_CODE_VIDEO } } }] }, { repos: [{ path: docs, git: false }] }]);
     } finally {
       canvas.shutdown();
     }

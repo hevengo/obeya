@@ -31,7 +31,7 @@ const site = z
     tags: z.record(z.string().trim().min(1), z.array(z.string().trim().min(1))).optional(),
   })
   .strict();
-const demo = z.object({ site: site.optional(), language: z.enum(LANGUAGES).optional() }).strict();
+const demo = z.object({ site: site.optional(), language: z.enum(LANGUAGES).optional(), code: z.string().optional() }).strict();
 const app = z.object({ run: z.string().optional(), stop: z.string().optional(), keep: z.string().optional() }).strict();
 
 /** What a repository's settings for this machine may hold (`RepoSettings`): how it works, and its main branch. */

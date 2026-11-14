@@ -9,7 +9,7 @@ import { Naming } from './cardLink';
 import { arrivedOnOpenCard, held, openedWith } from './demoSeen';
 import { Branch, type CardChange, useCardDiff } from './diff';
 import type { CardDiff } from '../core/diff';
-import { ResultFiles } from './files';
+import { CODE_VIDEO, DEMO, ResultFiles } from './files';
 import { DiscardChanges, FolderBox, FolderLine } from './folder';
 import { landedRef } from './parts';
 import { holdsNotes } from '../core/queue';
@@ -679,10 +679,12 @@ function TaskResult({ v, diff, tab, onTab, autoplay }: { v: View; diff: CardDiff
         onTab={onTab}
         diff={diff}
         demo={
-          item.demo && (
+          item.demo && ((active) => (
             <DemoView
               item={item}
-              demo={item.demo}
+              demo={item.demo!}
+              active={active}
+              onShow={() => onTab(DEMO)}
               autoplay={autoplay}
               comments={agentListens(item)}
               top={
@@ -706,8 +708,11 @@ function TaskResult({ v, diff, tab, onTab, autoplay }: { v: View; diff: CardDiff
                 ))
               }
             />
-          )
+          ))
         }
+        codeVideo={item.codeVideo && ((active) => (
+          <DemoView item={item} demo={item.codeVideo!} videoKind="code" active={active} onShow={() => onTab(CODE_VIDEO)} autoplay={false} comments={agentListens(item)} />
+        ))}
       />
       {item.pr && (item.state === 'inPr' || item.state === 'waiting') && (
         <PrBox pr={item.pr} {...(item.rollbackOf ? { rollbackOf: item.rollbackOf } : {})} {...(item.contribution?.held && item.state === 'waiting' ? { held: item.contribution.held, author: item.contribution.author, card: item.id } : {})} />

@@ -8,6 +8,7 @@ import { type DemoSettings, type DemoSettingsView, type DemoSpaceView, type Demo
 import { AGENT_ROLES, AGENT_SPEEDS, type AgentSpeed, type AgentEffort, type AgentRole, type AgentSetting, type Harness, HARNESSES, modelChoices } from '../core/agents';
 import { blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSite, type PersonalSiteView, type SiteSetupJob, type TagProposalJob, type HostConfig, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, START_FAILED } from '../core/config';
 import { lineDiff } from '../core/diff';
+import { DEFAULT_CODE_VIDEO } from '../core/code-video';
 import { parseTagLines, tagLines } from '../core/page-tags';
 import { knownLanguage, LANGUAGES } from '../core/locale';
 import { AccessSection } from './access';
@@ -15,7 +16,7 @@ import { effortsOf, HarnessUpdate, modelLabel } from './agentPick';
 import { api, reload, type SiteHow, failText } from './api';
 import { useAct, useLoaded, usePoll } from './act';
 import { useLatest } from './latest';
-import { type FilledClones, keepConfigDraft, keptConfigDraft, restartsAgents, withClones } from './configDraft';
+import { type FilledClones, keepConfigDraft, keptConfigDraft, savedConfigDraft, restartsAgents, withClones } from './configDraft';
 import { keep } from './keep';
 import { plain } from './markdown';
 import { FolderPick } from './folderPick';
@@ -407,15 +408,20 @@ export function ConfigDialog({ on, page, onClose, onSetup, onAsk, onTalk, onProb
                 onSave={async () => {
                   let applies = false;
                   await act(async () => {
-                    const { restarting, applied } = await api.saveConfig(draft);
+                    const saving = (await api.checkConfig(draft)).canvases;
+                    const { restarting, applied } = await api.saveConfig(saving);
                     // what is saved now is the draft as last checked; settings applied at once change what the
                     // repositories amount to (where "For everyone" goes, say), so it is read and checked again
                     const fresh = applied ? await api.config() : null;
                     savedSeq.current++;
                     setSaved(checked);
-                    setView({ ...(fresh ?? view), canvases: draft, restarting });
+                    setRows((current) => {
+                      const configs = current === rows ? saving : savedConfigDraft(draft, saving, current.map((r) => r.canvas));
+                      return current.map((r, i) => ({ ...r, canvas: configs[i]! }));
+                    });
+                    setView({ ...(fresh ?? view), canvases: saving, restarting });
                     checkSaved();
-                    setStatus(restarting ? c.saved : applied ? (restartsAgents(view.canvases, draft) ? c.savedRestarts : c.savedApplied) : c.savedOnly);
+                    setStatus(restarting ? c.saved : applied ? (restartsAgents(view.canvases, saving) ? c.savedRestarts : c.savedApplied) : c.savedOnly);
                     applies = !restarting;
                   });
                   return applies;
@@ -1856,7 +1862,7 @@ function GithubAccount({ github, value, onChange }: { github: NonNullable<Resolv
  * The settings of a repository, set on this machine (`RepoSettings`); those of `app` and `demo` each
  * on its own, `demo.language` as `demoLanguage` beside the repository's own `language`.
  */
-type SettingKey = Exclude<keyof RepoSettings, NestedSetting> | 'run' | 'stop' | 'keep' | 'site' | 'demoLanguage';
+type SettingKey = Exclude<keyof RepoSettings, NestedSetting> | 'run' | 'stop' | 'keep' | 'site' | 'demoLanguage' | 'code';
 
 /** The setting of `app` or `demo` that holds `k`, and its field there, if one does. */
 function nestedOf(k: SettingKey): [NestedSetting, string] | undefined {
@@ -1894,6 +1900,7 @@ function RepoSettingsBlock({
   onChange: (s: RepoSettings | undefined) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const codeBox = useRef<HTMLTextAreaElement>(null);
   const [shown, setShown] = useState<string | null>(null);
   useEffect(() => {
     if (!show) return;
@@ -1907,12 +1914,13 @@ function RepoSettingsBlock({
   const c = t.config.settings;
   const s = repo.settings ?? {};
   const { app: _, demo: __, ...flat } = values;
-  const base: Record<SettingKey, SettingValue<unknown>> = { ...flat, ...values.app, site: values.demo.site, demoLanguage: values.demo.language };
+  const base: Record<SettingKey, SettingValue<unknown>> = { ...flat, ...values.app, site: values.demo.site, demoLanguage: values.demo.language, code: values.demo.code };
   const own = (k: SettingKey): unknown => {
     const n = nestedOf(k);
     return n ? (s[n[0]] as Record<string, unknown> | undefined)?.[n[1]] : s[k as keyof RepoSettings];
   };
   const value = <T,>(k: SettingKey) => (own(k) ?? base[k].value) as T;
+  useFitHeight(codeBox, value<string>('code'), !folder);
   const set = (k: SettingKey, v: unknown) => {
     const next: Record<string, unknown> = { ...s };
     const n = nestedOf(k);
@@ -2022,6 +2030,7 @@ function RepoSettingsBlock({
       <div className="cfg-group">
         <h5 className="cfg-group-head">{t.config.groups.demos}</h5>
         {choice('demoLanguage', c.demoLanguage, LANGUAGES, (x) => c.languages[x], c.demoLanguageHint)}
+        {!folder && row('code', c.codeVideo, <><textarea ref={codeBox} rows={3} aria-label={c.codeVideo} value={value<string>('code')} onChange={(e) => set('code', e.target.value)} />{!value<string>('code').trim() && <button type="button" className="btn small" onClick={() => set('code', DEFAULT_CODE_VIDEO)}>{c.codeVideoDefault}</button>}</>, c.codeVideoHint)}
         {row(
           'site',
           c.site,

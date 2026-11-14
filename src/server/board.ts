@@ -464,9 +464,10 @@ export class Board {
   }
 
   /** The directory and kind of the card's latest demo, or of the `n`th of its earlier ones; it stays with the card after approval. */
-  demoFiles(id: string, n?: number): { dir: string; kind: DemoKind } | null {
+  demoFiles(id: string, n?: number, video: 'demo' | 'code' = 'demo'): { dir: string; kind: DemoKind } | null {
     const r = this.own(id);
-    const stored = n === undefined ? fromJson(r.demo) : (fromJson(r.demos) ?? [])[n];
+    const source = video === 'code' ? { demo: r.code_video, demos: r.code_videos } : r;
+    const stored = n === undefined ? fromJson(source.demo) : (fromJson(source.demos) ?? [])[n];
     if (!stored) return null;
     const { dir, kind } = stored;
     return { dir, kind };

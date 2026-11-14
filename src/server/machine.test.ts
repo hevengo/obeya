@@ -1,3 +1,4 @@
+import { DEFAULT_CODE_VIDEO } from '../core/code-video';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -234,14 +235,14 @@ describe('the first canvas', () => {
     const out = await setup().canvas({ path: repo });
     expect(out).toEqual({ canvas: 'shop', branch: 'master', opens: true });
     expect(applied).toEqual([['shop']]);
-    expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo }] }]);
+    expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo, settings: { demo: { code: DEFAULT_CODE_VIDEO } } }] }]);
     expect(readFileSync(join(home, WELCOME_FILE), 'utf8')).toBe('shop');
   });
 
   test('a repository whose settings say clones gets clones', async () => {
     const repo = gitRepo(join(dir, 'shop'), { 'README.md': 'hi\n', '.obeya/settings.json': '{ "workspaces": "clones" }\n' });
     await setup().canvas({ path: repo });
-    expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo, clones: CLONES }] }]);
+    expect(JSON.parse(readFileSync(join(home, 'canvases.json'), 'utf8'))).toEqual([{ repos: [{ path: repo, clones: CLONES, settings: { demo: { code: DEFAULT_CODE_VIDEO } } }] }]);
   });
 
   test('says of a folder before it is saved whether it holds a repository, and its main branch', async () => {

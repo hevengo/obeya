@@ -133,6 +133,10 @@ export interface Item {
   landing?: true;
   /** The demo, when `need` is `demo`; its files are served under `/api/cards/:id/demo/`. */
   demo?: Demo;
+  /** The owner's code walkthrough; kept private, never shared or exported with the behaviour demo. */
+  codeVideo?: Demo;
+  /** Earlier code walkthroughs, with the same history and playback rules as behaviour demos. */
+  codeVideos?: EarlierDemo[];
   /**
    * The demos of earlier handovers a later one replaced, the oldest first, as long as their files
    * are still on disk; each one's files are served under `/api/cards/:id/demos/:n/`.
@@ -755,6 +759,8 @@ export type WorkspaceShortage = 'none' | 'dirty' | 'slots';
  * to look at (design drafts side by side, a layout, an analysis).
  */
 export type DemoKind = 'video' | 'html';
+/** Which of a card's two video histories a timed comment refers to; absent on old comments means demo. */
+export type VideoKind = 'demo' | 'code';
 
 export interface Demo {
   kind: DemoKind;
@@ -902,6 +908,7 @@ export interface CardEvent {
 
 /** A place in a card's demo video the owner's words are about, as the worker reads it with them. */
 export interface Spot {
+  video?: VideoKind;
   /** Seconds into the video. */
   at: number;
   /** The chapter playing there. */
@@ -917,7 +924,7 @@ export interface Spot {
 }
 
 /** A place in the demo video as the browser sends it with the owner's words: Obeya adds chapter and narration. */
-export type SpotInput = Pick<Spot, 'at' | 'still' | 'demo'>;
+export type SpotInput = Pick<Spot, 'at' | 'still' | 'demo' | 'video'>;
 
 export interface CanvasInfo {
   id: string;

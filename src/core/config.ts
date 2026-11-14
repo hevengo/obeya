@@ -201,9 +201,10 @@ export interface RepoSettings {
    * `site`: the static site Obeya keeps and deploys itself to share demos on (`src/server/site.ts`);
    * without one, "Share" exports a demo as a file. `language`: the language of the repository's
    * demos (narration, captions, report, shared pages) and of its site's overview, over the one of
-   * the demo settings (`demo.json`), which applies without it.
+   * the demo settings (`demo.json`), which applies without it. `code`: prose enabling a private
+   * code walkthrough, and the owner's lens for it; absent or blank leaves it off.
    */
-  demo?: { site?: DemoSite; language?: NarrationLanguage };
+  demo?: { site?: DemoSite; language?: NarrationLanguage; code?: string };
 }
 
 /**
@@ -223,7 +224,7 @@ const everyShared: [Exclude<keyof SharedSettings, (typeof SHARED_FIELDS)[number]
 void everyShared;
 
 /** The settings made of fields that are each set, layered and taken over on their own, and their fields. */
-export const NESTED_SETTINGS = { app: ['run', 'stop', 'keep'], demo: ['site', 'language'] } as const satisfies { [K in keyof RepoSettings]?: readonly (keyof NonNullable<RepoSettings[K]>)[] };
+export const NESTED_SETTINGS = { app: ['run', 'stop', 'keep'], demo: ['site', 'language', 'code'] } as const satisfies { [K in keyof RepoSettings]?: readonly (keyof NonNullable<RepoSettings[K]>)[] };
 export type NestedSetting = keyof typeof NESTED_SETTINGS;
 export const isNested = (field: string): field is NestedSetting => field in NESTED_SETTINGS;
 
@@ -297,7 +298,7 @@ export function commandLines(c: RepoCommands | undefined, g: TrustGroup): string
  */
 export type RepoValues = { [K in Exclude<keyof RepoSettings, NestedSetting>]-?: SettingValue<NonNullable<RepoSettings[K]>> } & {
   app: { [F in keyof AppSettings]-?: SettingValue<NonNullable<AppSettings[F]>> };
-  demo: { site: SettingValue<DemoSite | null>; language: SettingValue<NarrationLanguage | null> };
+  demo: { site: SettingValue<DemoSite | null>; language: SettingValue<NarrationLanguage | null>; code: SettingValue<string> };
 };
 
 /**

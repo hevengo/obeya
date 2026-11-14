@@ -11,7 +11,8 @@ import type { DueRestart } from './workers';
 
 /** Where in the demo video the owner's words are, as the worker reads it above them. */
 export const spotNote = (spot: Spot) => {
-  return `[${spot.earlier ? 'Earlier demo video, one a later handover of yours replaced,' : 'Demo video'} at ${mmss(spot.at)}${spot.chapter ? `, chapter “${spot.chapter}”` : ''}${spot.narration ? `, narration: “${spot.narration}”` : ''}]`;
+  const name = spot.video === 'code' ? 'Code video' : 'Demo video';
+  return `[${spot.earlier ? `Earlier ${name.toLowerCase()}, one a later handover of yours replaced,` : name} at ${mmss(spot.at)}${spot.chapter ? `, chapter “${spot.chapter}”` : ''}${spot.narration ? `, narration: “${spot.narration}”` : ''}]`;
 };
 
 /** How the worker hears that its approved work could not land for something that is not its own to fix. */
