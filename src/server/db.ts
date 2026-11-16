@@ -750,18 +750,19 @@ export class Store {
         this.db.run(SCHEMA);
         this.db.run(`PRAGMA user_version = ${RELEASED}`);
       })();
-    // The original fork used v86/v87 for videos/work_place, while upstream used
+    // The original fork used v86/v87/v88 for videos/work_place/work_in, while upstream used
     // those positions for resumes/joined. Recognize only that known schema and
     // bridge it atomically; subsequent versions follow upstream's order.
-    if (user_version === 86 || user_version === 87) {
+    if (user_version === 86 || user_version === 87 || user_version === 88) {
       const columns = new Set((this.db.query('PRAGMA table_info(cards)').all() as { name: string }[]).map((c) => c.name));
       if (columns.has('code_video') && columns.has('code_videos') && !columns.has('resumes')) {
         this.db.transaction(() => {
           for (const migration of MIGRATIONS.slice(45, 51)) this.db.run(migration);
           if (!columns.has('work_place')) this.db.run(MIGRATIONS[52]!);
-          this.db.run('PRAGMA user_version = 93');
+          if (!columns.has('work_in')) this.db.run(MIGRATIONS[53]!);
+          this.db.run('PRAGMA user_version = 94');
         })();
-        user_version = 93;
+        user_version = 94;
       }
     }
     for (let v = Math.max(user_version, RELEASED); v < latest; v++) {

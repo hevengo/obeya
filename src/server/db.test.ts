@@ -310,3 +310,19 @@ test.each([false, true])('upgrades the historical fork schema without losing pri
     expect(reopened.card('fork-card')!.code_video).toContain('/private-tour');
     reopened.db.close();
   }));
+
+test('upgrades the historical W2 schema without losing the card work-location override', () =>
+  withPath((path) => {
+    const db = databaseBefore(path, 45);
+    db.run('ALTER TABLE cards ADD COLUMN code_video TEXT; ALTER TABLE cards ADD COLUMN code_videos TEXT; ALTER TABLE cards ADD COLUMN work_place TEXT; ALTER TABLE cards ADD COLUMN work_in TEXT;');
+    db.run('PRAGMA user_version = 88');
+    db.run("INSERT INTO cards (id, short, number, canvas_id, kind, x, y, created_at, updated_at, work_place, work_in) VALUES ('w2-card', 'w2card', 1, 'c', 'task', 0, 0, '2026-11-13', '2026-11-13', 'project-folder', 'project-folder')");
+    db.close();
+    const current = new Store(path);
+    expect(current.card('w2-card')).toMatchObject({ work_in: 'project-folder', work_place: 'project-folder', resumes: null, upstream: null, adopted: null });
+    expect(current.db.query('SELECT joined, stopped FROM talk').all()).toEqual([]);
+    current.db.close();
+    const reopened = new Store(path);
+    expect(reopened.card('w2-card')!.work_in).toBe('project-folder');
+    reopened.db.close();
+  }));
