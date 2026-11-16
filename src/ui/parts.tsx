@@ -229,6 +229,7 @@ export function CardFace({ item, where, underway, since, chip, inButton }: { ite
       </div>
       {inButton && <span className="card-no plain">{cardTag(item.number)}</span>}
       {needsYou(item) && !underway && <div className="badge pulse">{item.state === 'proposal' ? '✦' : '!'}</div>}
+      <span className="activity-rule" aria-hidden="true" />
     </>
   );
 }

@@ -359,10 +359,18 @@ Index cards pinned to a wall, so that nobody takes Obeya for the stock AI-genera
   fading, changes nothing but size and opacity: an animation the browser has to repaint makes the
   whole card under it shimmer on a zoomed-out canvas, 2026-10-30); an idea is on rose stock; a
   proposal only pencilled in (dashed, no stock); a queued card's rule dashed; done and live cards
-  fade and yellow slightly (not while their agent still works after landing: then only their state line is in the working ink, with the moving line). The state line at the
+  fade and yellow slightly (not while their agent still works after landing: then the activity
+  stroke is in the working ink). The state line at the
   card's foot stays one line, cut short with an ellipsis when it is longer, so it never runs into
   the text above it. Under the pointer a
-  card lifts; dragged, it tilts as if held. "At work" is a pencil stroke drawn again and again.
+  card lifts; dragged, it tilts as if held. "At work" is a pencil stroke drawn again and again:
+  beside the state line near, across the paler top band below 72% zoom. A proposal has no band,
+  so its stroke follows the top edge; a delivered workstream's chip uses its top rule at every
+  zoom. The same cards show it at every zoom, including agents exploring, revising, landing,
+  taking in a handover reply or still working after completion; paused and snoozed cards do not.
+  A paused working card keeps its still band. Only the stroke moves, by a composited transform
+  that does not repaint the card, so its title and neighbours stay steady. Reduced motion keeps
+  a still partial stroke, distinct from a card at rest. Orange remains the loudest cue.
 - *Inks*: planned pencil grey, working clear blue, waiting for the owner strong orange (also every
   count of what waits), approved yellow-green, in PR petrol, proposal violet, idea madder red, live
   and done faded. Dark mode is black stock and white pencil with inks as far apart: blue and green

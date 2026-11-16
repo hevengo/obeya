@@ -151,7 +151,7 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 
 /* an index card pinned to the wall: card stock with nearly square corners, a short hard shadow, the state as a
    rule across the top; title in a serif, the small print in a condensed sans */
-.card { background: var(--card); border-radius: 2px; box-shadow: var(--shadow); padding: 13px 14px 12px 14px;
+.card { --activity: none; --activity-ink: var(--c); background: var(--card); border-radius: 2px; box-shadow: var(--shadow); padding: 13px 14px 12px 14px;
   cursor: pointer; overflow: visible; transition: box-shadow .18s, transform .18s, opacity .25s; -webkit-user-select: none; user-select: none;
   font-family: var(--cond); }
 .card:hover { box-shadow: var(--lift); transform: translate(-1px, -2px); }
@@ -197,9 +197,9 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 .card.q-card .state { left: 16px; }
 .card.q-card .kind { color: var(--question); text-transform: uppercase; letter-spacing: .07em; font-size: 10.5px; }
 /* the moving line: a pencil stroke being drawn, again and again */
-.card.q-card.thinking .state::after,
-.card.s-idea.thinking .state::after, .card.s-proposal.thinking .state::after, .card.underway .state::after,
-.card.s-working .state::after, .card.s-waiting.answering .state::after, .card.finishing .state::after { content: ""; width: 36px; height: 2px;
+.card:where(.q-card.thinking, .s-idea.thinking, .s-proposal.thinking, .underway,
+  .s-working, .s-waiting.answering, .finishing) { --activity: block; }
+.card .state::after { content: ""; display: var(--activity); width: 36px; height: 2px;
   background: linear-gradient(90deg, var(--c) 0 50%, transparent 50%) 0 0 / 200% 100% no-repeat,
     color-mix(in srgb, var(--c) 22%, transparent);
   animation: draw 1.6s cubic-bezier(.5,0,.3,1) infinite; }
@@ -207,12 +207,12 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 /* done: the card has gone a little yellow and been pushed back */
 .card.s-live, .card.s-done { opacity: .74; background-color: color-mix(in srgb, var(--live) 14%, var(--card)); }
 /* its agent still at work after the landing: the yellowed stock, but awake, its state line in the working colour */
-.card.finishing { opacity: 1; }
+.card.finishing { --activity-ink: var(--working); opacity: 1; }
 .card.finishing .state, .p-state.finishing { --c: var(--working); }
 .btn .btn-mark { margin-right: 3px; vertical-align: -1px; }
 /* its agent paused by the owner: the line stands still, in pencil grey */
 .card.paused .state, .p-state.paused { --c: var(--muted); }
-.card.paused .state::after { display: none; }
+.card.paused { --activity: none; }
 .card .landed-part { color: var(--approved); border: 1px solid color-mix(in srgb, var(--approved) 45%, transparent); border-radius: 2px; padding: 0 5px; font-weight: 500; }
 .card.s-live .ttl, .card.s-done .ttl { font-weight: 500; }
 /* a proposal is a card only pencilled in: no stock yet, a dashed outline */
@@ -231,7 +231,7 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 .card.snoozed, .card.snoozed.s-waiting, .card.snoozed.s-idea.your-turn { box-shadow: var(--shadow); }
 .card.snoozed:hover, .card.snoozed.s-waiting:hover, .card.snoozed.s-idea.your-turn:hover { box-shadow: var(--lift); }
 .card.snoozed .state { --c: var(--muted); }
-.card.snoozed .state::after { display: none; }
+.card.snoozed { --activity: none; }
 .card .state .clock-mark { flex: none; margin-right: -2px; }
 .ph-card .state .clock-mark { align-self: flex-start; margin: 2px 5px 0 0; }
 @keyframes flow { from { background-position: 100% 0; } to { background-position: -100% 0; } }
@@ -271,6 +271,23 @@ h1, h2, .cfg-head h3, .p-title, .project > .head .ttl, .timeline .a-ttl { font-f
 /* the owner's turn framed a size up, and only where the near view frames it too (not underway, answering or snoozed) */
 .z-far .card.s-waiting:not(.underway):not(.answering):not(.snoozed), .z-far .card.s-idea.your-turn:not(.snoozed) { box-shadow: 0 0 0 5px var(--waiting), var(--shadow); }
 .z-far .card.chip { opacity: .45; }
+/* A separate clipped strip keeps the moving paint off the card's raster layer at far zoom.
+   The same activity flag drives the foot, far band and delivered workstream's rule. */
+.activity-rule { display: none; }
+.card .activity-rule { position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  border-radius: 2px; overflow: hidden; pointer-events: none;
+  background: color-mix(in srgb, var(--activity-ink) 22%, var(--card)); }
+.z-far .card .activity-rule, .card.chip .activity-rule { display: var(--activity); }
+.z-far .card .activity-rule { height: 8px; }
+.z-far .card.s-proposal .activity-rule { height: 3px; background: none; }
+.card .activity-rule::after { content: ""; display: block; width: 60%; height: 100%; background: var(--activity-ink);
+  will-change: transform; animation: activity-draw 1.6s cubic-bezier(.5,0,.3,1) infinite; }
+@keyframes activity-draw { from { transform: translateX(-100%); } to { transform: translateX(170%); } }
+.z-far .card.chip.finishing { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .card .state::after { animation: none; background-position: 50% 0; }
+  .card .activity-rule::after { animation: none; transform: translateX(33%); will-change: auto; }
+}
 
 /* ---------- chrome ---------- */
 /* a frosted strip the canvas slides under, so cards never run into the pills; it ends at the panels docked at the window's edges */
