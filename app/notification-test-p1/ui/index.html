@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Obeya notification test P1</title>
+<style>
+  :root { color-scheme: light dark; font: 15px system-ui; }
+  body { margin: 24px; }
+  button { display: block; margin: 8px 0; font: inherit; }
+</style>
+<main>
+  <p>Choose a notification, then switch to another app within ten seconds.</p>
+  <button type="button" disabled>Notify in 10 seconds</button>
+  <button type="button" data-grouped disabled>Notify for three cards in 10 seconds</button>
+  <p id="status" role="status"></p>
+  <p id="clicked" role="status">Last notification clicked: none yet</p>
+</main>
+<script type="module">
+  const { core, event } = window.__TAURI__;
+  const buttons = document.querySelectorAll('button');
+  const status = document.querySelector('#status');
+  const clicked = document.querySelector('#clicked');
+
+  await event.listen('notification-clicked', ({ payload }) => {
+    clicked.textContent = `Last notification clicked: ${payload}`;
+  });
+
+  for (const button of buttons) {
+    button.disabled = false;
+    button.addEventListener('click', async () => {
+      for (const choice of buttons) choice.disabled = true;
+      status.textContent = 'Notification scheduled.';
+      try {
+        await core.invoke('notify', { grouped: button.hasAttribute('data-grouped') });
+        status.textContent = 'Notification requested from macOS.';
+      } catch (error) {
+        status.textContent = `Notification request failed: ${error}`;
+      } finally {
+        for (const choice of buttons) choice.disabled = false;
+      }
+    });
+  }
+</script>
+</html>

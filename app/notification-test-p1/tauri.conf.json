@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Obeya notification test P1",
+  "identifier": "si.obeya.notification-test-p1",
+  "build": { "frontendDist": "ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{ "label": "main", "title": "Obeya notification test P1", "width": 490, "height": 280 }],
+    "security": {
+      "capabilities": [{
+        "identifier": "notification-test",
+        "windows": ["main"],
+        "permissions": ["core:event:allow-listen"]
+      }]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": ["../icons/32x32.png", "../icons/icon.icns"],
+    "macOS": { "minimumSystemVersion": "11.0", "signingIdentity": "-" }
+  }
+}
