@@ -14,7 +14,7 @@ it beside the cards in progress likely ends in merge conflicts. For each card in
 the estimated files and what the branch has changed so far (each file with its changed line ranges
 and git's function context). Sharing a file is fine (additions in different places merge cleanly);
 touching the same lines or function, or code one card moves, renames or reformats while the other
-edits it, is not. Soft paths (`softPaths`, docs) do not count. In doubt the card runs: a conflict
+edits it, is not. Between two isolated workspaces, soft paths (`softPaths`, docs) do not count. In doubt the card runs: a conflict
 that happens anyway goes back to its worker on landing. The estimated files stay internal: a card does not show
 them (they read as a guess beside the files the card actually changed, and the owner has nothing to
 do with them; 2026-11-02).
@@ -28,6 +28,26 @@ the card's: a pull after a merge on the forge rebases the local main's unpushed 
 show a card that changed nothing with their files and "Approve" (2026-11-02). git reads the changes
 of all cards in progress at once, without blocking the server.
 
+A task's location is resolved from its saved run location, or its current per-task choice and
+repository default before starting. The Coordinator sees that location for each candidate, active
+card and card queued ahead. When either works in the project folder, overlapping files count even
+at different lines: concurrent in-place edits can overwrite one another, and an isolated branch's
+landing cannot overwrite uncommitted edits. Both start orders check estimated and actual changes,
+including renames' old and new paths and file/directory replacements. No soft paths are excluded
+for these checks. A file overlap in the returned estimates and actual paths holds the queue even
+if the Coordinator's prose overlooks it; disjoint files still run in parallel.
+
+In-place changes are read during open tool windows as well as after tools finish. Waiting,
+stopped, approved and archived tasks remain obstacles while their recorded changes are still
+uncommitted and attributable to the current files. A done state alone clears nothing. A task
+no longer working contributes its remaining files, not its old estimate of future edits. Once
+the files are committed, discarded or superseded, the obstacle ends; checks on board changes and
+at least once a minute let queued work proceed even when git changes outside Obeya. The historical
+change list stays on the task; a cleared version does not regain attribution when an owner later
+writes identical bytes. Timestamp-only touches of committed files create no obstacle. Slots cap busy workers across both locations; being done with
+uncommitted changes takes no worker slot. “Start anyway” bypasses scheduling, while the landing
+protection described in Landing still applies.
+
 In a folder without git (see Folders without git) the judgement is whether the card gets in the way
 of one in progress: the same files changed, moved or deleted, or a directory reorganised that the
 other works in; working side by side in one directory is fine. No paths are soft there.
@@ -40,7 +60,7 @@ the cards that one sees as ahead or to build on, so no two cards wait for each o
 
 A waiting card shows the reason (one that starts says which files it shares and why that is fine).
 Work landed on `main` counts as landed also while its card is in a pull request in another
-repository it also needed (see PR loop in Landing), and as in progress no more. Once what it waits for has landed or stopped it starts, or, if other work may have started
+repository it also needed (see PR loop in Landing), and as in progress no more. Once what it waits for has landed or stopped, and no retained project-folder changes still hold it, it starts, or, if other work may have started
 meanwhile, it is judged again. Cards whose waits end at once (the follow-up tasks of a merged PR,
 say) are judged together, in one turn as a project's start is (see Starting a whole project): it
 sees them in their order in the queue, keeps that order unless a dependency or a likely conflict

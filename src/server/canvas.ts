@@ -2348,7 +2348,7 @@ export class CanvasRuntime {
     for (const [, w] of this.writing) clearTimeout(w.timer);
     for (const stop of this.branchSettings.values()) stop();
     const stopping = this.repos.map((r) => this.stopRepo(r));
-    this.coordinator.shutdown();
+    stopping.push(this.coordinator.shutdown());
     this.commander.shutdown();
     this.explorers.shutdown();
     return Promise.all(stopping).then(() => {});

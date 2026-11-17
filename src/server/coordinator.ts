@@ -74,6 +74,64 @@ export class Coordinator {
   /** How many of those are still to come or under way. */
   private queued = 0;
   private draining = false;
+  /** Current obstacles remain after approval or stop, until their files are clean or superseded. */
+  private projectChanges = new Map<string, Change[]>();
+  private projectOwners = new Map<string, Item>();
+  private withProjectOwners(): Item[] {
+    const items = new Map(this.o.board.items().map((i) => [i.id, i]));
+    for (const [id, i] of this.projectOwners) if (!items.has(id)) items.set(id, i);
+    return [...items.values()];
+  }
+
+  private projectReads = new Set<Promise<unknown>>();
+  private refreshProject(card: Item): Promise<void> {
+    if (this.ended || card.repoDown) return Promise.resolve();
+    const reading = (async () => {
+      const changes = await this.o.repoFor(card).workspaces.projectChanges?.();
+      for (const [id, i] of this.projectOwners) if (i.repo === card.repo) {
+        this.projectChanges.delete(id);
+        this.projectOwners.delete(id);
+      }
+      for (const [id, paths] of changes ?? []) {
+        // Tracking can hold records from another canvas sharing this checkout.
+        let owner: Item | undefined;
+        try { owner = this.o.board.card(id); } catch { continue; }
+        if (!owner || owner.repo !== card.repo) continue;
+        this.projectChanges.set(id, paths);
+        this.projectOwners.set(id, owner);
+      }
+    })();
+    this.projectReads.add(reading);
+    return reading.finally(() => this.projectReads.delete(reading));
+  }
+
+  private inPlace(card: Item): boolean {
+    return !!card.projectFolder || (!card.repoDown && this.o.repoFor(card).workspaces.placeFor?.(card.id) === 'project-folder');
+  }
+
+  private expected(card: Item): string[] {
+    return (this.inPlace(card) ? card.state === 'working' || inQueue(card) : ACTIVE.includes(card.state) || inQueue(card)) ? card.scope ?? [] : [];
+  }
+
+  private changesOf(card: Item): Promise<Change[]> {
+    return this.inPlace(card) ? Promise.resolve(this.projectChanges.get(card.id) ?? []) : this.o.repoFor(card).workspaces.changes(card.id);
+  }
+
+  /** A shared file cannot be edited or landed over concurrently, even at different lines. */
+  private sharedConflicts(card: Item, files: string[], others: Item[]): Promise<string[]> {
+    if (this.ended || (!this.inPlace(card) && !others.some((a) => this.inPlace(a)))) return Promise.resolve([]);
+    const checking = (async () => {
+      const changes = await Promise.all(others.map(async (a) => this.inPlace(a) ? this.projectChanges.get(a.id) ?? [] :
+        (await this.o.repoFor(a).workspaces.changedFiles(a.id, undefined, true)).map((file) => ({ file, regions: [] }))));
+      return others.filter((a, n) => a.id !== card.id && (this.inPlace(card) || this.inPlace(a)) &&
+        [...this.expected(a), ...changes[n]!.map((c) => c.file)].some((p) => files.some((f) =>
+          overlaps(normalize(f), normalize(p)) || normalize(f).startsWith(`${normalize(p)}/`) || normalize(p).startsWith(`${normalize(f)}/`))))
+        .map((a) => a.id);
+    })();
+    this.projectReads.add(checking);
+    return checking.finally(() => this.projectReads.delete(checking));
+  }
+
   /** A look again at cards waiting for a workspace, which can free up without a change of the board (a dirty clone cleaned up). */
   private recheck?: ReturnType<typeof setTimeout>;
   /** Cards being named now: asked again, the same session answers. */
@@ -116,6 +174,7 @@ export class Coordinator {
     this.unwatch();
     clearTimeout(this.recheck);
     for (const t of this.evictions.values()) clearTimeout(t);
+    return Promise.all([...this.projectReads]).then(() => {});
   }
 
   /**
@@ -369,11 +428,10 @@ export class Coordinator {
 
   /** Cards in progress; with a repository, only those a card of it can collide with. */
   inProgress(repo?: string): Item[] {
-    return this.o.board
-      .snapshot()
+    return this.withProjectOwners()
       // approved work counts until it has landed: a PR not yet merged still holds its files
       // a prototype never lands, so it collides with nothing; nor does work landed on main whose card is in a pull request elsewhere
-      .items.filter((i) => ACTIVE.includes(i.state) && !i.onMain && i.kind !== 'project' && !i.prototypeOf && (!repo || i.repo === repo));
+      .filter((i) => ((this.inPlace(i) ? i.state === 'working' : ACTIVE.includes(i.state)) || this.projectChanges.has(i.id)) && !i.onMain && i.kind !== 'project' && !i.prototypeOf && (!repo || i.repo === repo));
   }
 
   /**
@@ -418,7 +476,9 @@ export class Coordinator {
     // taken out of the queue or deleted while waiting for its turn
     if (!card || card.state !== 'planned' || !card.queue || !('checking' in card.queue)) return;
     if (card.repoDown) return this.repoGone(card);
-    const active = this.inProgress(card.repo);
+    await this.refreshProject(card);
+    if (this.ended) return;
+    const active = this.inProgress(card.repo).filter((i) => i.id !== card.id);
     const ahead = this.ahead(card);
     const pending = this.pending(card, active, ahead);
     if (!active.length && !ahead.length && !pending.length) {
@@ -440,6 +500,11 @@ export class Coordinator {
       this.o.board.log(cardId, 'error', 'obeya', this.o.board.t.coordinator.estimateFailed(messageOf(e)));
       scope = { files: [], conflictsWith: [], buildsOn: [], reason: '' };
     }
+    await this.refreshProject(card);
+    if (this.ended) return;
+    const current = this.inProgress(card.repo).filter((i) => i.id !== card.id);
+    const shared = await this.sharedConflicts(card, scope.files, [...current, ...ahead]);
+    scope.conflictsWith = [...new Set([...scope.conflictsWith, ...shared])];
     const now = this.o.board.item(cardId);
     if (!now?.queue) return;
     // its repository stopped running while the Coordinator read
@@ -447,10 +512,10 @@ export class Coordinator {
     this.o.board.work(cardId, { scope: toJson({ files: scope.files, reason: scope.reason }) });
     // the workstreams it builds on, and the cards in progress or queued ahead whose changes it
     // expects to conflict with the card's
-    const behind = [...active, ...ahead, ...pending].filter((a) => scope.buildsOn.includes(a.id) || scope.conflictsWith.includes(a.id)).map((a) => a.id);
+    const behind = [...current, ...ahead, ...pending].filter((a) => scope.buildsOn.includes(a.id) || scope.conflictsWith.includes(a.id)).map((a) => a.id);
     const t = this.o.board.t.coordinator;
     const buildsOn = behind.filter((id) => scope.buildsOn.includes(id));
-    const reason = scope.reason || (buildsOn.length ? t.buildsOn : t.likelyConflict);
+    const reason = (shared.length && !buildsOn.length ? t.projectConflict : scope.reason) || (buildsOn.length ? t.buildsOn : t.likelyConflict);
     void this.queueOrStart(cardId, behind, buildsOn, reason, `${t.noConflict}${scope.reason ? ` ${scope.reason}` : ''}`, (id) => {
       const a = ahead.find((x) => x.id === id);
       return a && t.waitsAhead(a.title);
@@ -463,7 +528,7 @@ export class Coordinator {
    * there are none, which it says. `name` names a card in the log where it knows better than `nameOf`.
    */
   private queueOrStart(cardId: string, inferred: string[], buildsOn: string[], reason: string, why: string, name?: (id: string) => string | undefined): boolean {
-    const items = this.o.board.items();
+    const items = this.withProjectOwners();
     // an arrow drawn while it was judged may make a card it was to wait for wait for it instead
     inferred = inferred.filter((id) => {
       const i = items.find((x) => x.id === id);
@@ -506,7 +571,8 @@ export class Coordinator {
     }
     const ids = new Set(batch.map((w) => w.id));
     const repo = batch[0]!.repo;
-    const active = this.inProgress(repo);
+    await this.refreshProject(batch[0]!);
+    const active = this.inProgress(repo).filter((i) => !ids.has(i.id));
     // what waits already came first, as for a single card, unless it waits for one of them; freed
     // cards keep their places, so what was queued after the last of them is not ahead
     const last = batch.map((w) => w.queue!.since).sort().at(-1)!;
@@ -538,27 +604,33 @@ export class Coordinator {
     const before = new Set([...active, ...ahead].map((i) => i.id));
     const names = new Map([...active, ...ahead, ...batch].map((i) => [i.id, i.parent && i.label && (!project || i.parent === key) ? `${i.label} ${this.o.board.t.quote(i.title)}` : this.o.board.t.quote(i.title)]));
     let started = 0;
-    plan.forEach((p, n) => {
+    await this.refreshProject(batch[0]!);
+    for (const [n, p] of plan.entries()) {
       const id = p.card;
-      if (!still(id)) return before.add(id);
-      const behind = p.waitsFor.filter((b) => before.has(b) && this.blocks(b));
+      if (!still(id)) { before.add(id); continue; }
+      const candidates = this.withProjectOwners().filter((i) => before.has(i.id) && this.blocks(i.id));
+      const shared = await this.sharedConflicts(this.card(id), p.files, candidates);
+      if (this.ended) return;
+      if (!still(id)) { before.add(id); continue; }
+      const behind = [...new Set([...p.waitsFor, ...shared])].filter((b) => before.has(b) && this.blocks(b));
       before.add(id);
       this.o.board.work(id, { scope: toJson({ files: p.files, reason: p.reason }), queue: toJson({ checking: true, together: key, since: times[n]! }) });
       const buildsOn = behind.filter((b) => p.buildsOn.includes(b));
-      const reason = p.reason || (buildsOn.length ? t.buildsOn : t.likelyConflict);
+      const reason = (shared.length && !buildsOn.length ? t.projectConflict : p.reason) || (buildsOn.length ? t.buildsOn : t.likelyConflict);
       if (this.queueOrStart(id, behind, buildsOn, reason, `${project ? t.togetherStarts : t.freedStarts}${p.reason ? ` ${p.reason}` : ''}`, (b) => names.get(b))) started++;
-    });
+    }
     if (project) this.o.board.log(key, 'state', 'coordinator', t.planned(started, plan.length));
   }
 
   /** Whether a card still holds others back: in progress, or waiting itself. */
   private blocks(id: string): boolean {
-    const i = this.o.board.item(id);
+    const i = this.o.board.item(id) ?? this.projectOwners.get(id);
     return !!i && (this.inProgress(i.repo).some((a) => a.id === id) || inQueue(i));
   }
 
   /** `begun`: it waited, started anyway or at work before, for a workspace or the canvas's agents (see `Wait`). */
   private startNow(cardId: string, why: string, begun?: boolean) {
+    if (this.ended) return;
     const since = this.o.board.item(cardId)?.queue?.since;
     this.setQueue(cardId, null);
     this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.coordinator.says(why));
@@ -570,6 +642,7 @@ export class Coordinator {
    * queue (`since`), and starts once one is free; any other failure is logged and leaves it planned.
    */
   private launch(cardId: string, since?: string, begun?: boolean) {
+    if (this.ended) return;
     const card = this.o.board.item(cardId);
     if (!card) return;
     const unheld = begun ? { begun: true as const } : {};
@@ -603,8 +676,11 @@ export class Coordinator {
     }, 0);
   }
 
-  private drain() {
-    const items = this.o.board.items();
+  private async drain() {
+    const repos = new Map(this.o.board.items().filter((i) => !i.repoDown).map((i) => [i.repo, i]));
+    await Promise.all([...repos.values()].map((i) => this.refreshProject(i)));
+    if (this.ended) return;
+    const items = this.withProjectOwners();
     // a card queued behind another that waits itself holds on while that one waits, and once it
     // has started, until it has landed: a card started or judged again here stays in this set
     const active = new Set([...this.inProgress(), ...items.filter(inQueue)].map((i) => i.id));
@@ -655,6 +731,13 @@ export class Coordinator {
           if (near) again = true;
           else full.add(w.repo);
           continue;
+        }
+        if (!begun && spaces.projectChanges) {
+          const shared = await this.sharedConflicts(w, w.scope ?? [], this.inProgress(w.repo));
+          if (shared.length) {
+            this.queueOrStart(w.id, shared, [], this.o.board.t.coordinator.projectConflict, '');
+            continue;
+          }
         }
         this.startNow(w.id, w.queue!.workspace === 'slots' ? this.o.board.t.coordinator.slotFree : this.o.board.t.coordinator.workspaceFree, begun);
         if (this.o.board.item(w.id)?.queue) full.add(w.repo);
@@ -710,7 +793,7 @@ export class Coordinator {
         this.serial(() => this.decide(w.id));
       }
     }
-    if ((full.size || again) && !this.recheck) {
+    if ((full.size || again || this.projectChanges.size) && !this.recheck) {
       this.recheck = setTimeout(() => {
         this.recheck = undefined;
         this.scheduleDrain();
@@ -870,7 +953,7 @@ export class Coordinator {
                 .map((w) => {
                   const of = w.parent ? this.o.board.item(w.parent) : undefined;
                   const where = of?.plan ? ` (workstream ${w.label ?? ''} of the project "${of.title}", plan doc ${of.plan.file})` : '';
-                  return `- ${cardTag(w.number)}: ${w.kind} "${w.title}"${where}${bodyCut(w, 1500)}`;
+                  return `- ${cardTag(w.number)}: ${w.kind} "${w.title}" (works in: ${this.inPlace(w) ? "the shared project folder" : "a workspace of its own"})${where}${bodyCut(w, 1500)}`;
                 })
                 .join('\n')}`,
             ]),
@@ -888,6 +971,7 @@ export class Coordinator {
     const siblings = [...active, ...ahead].filter((a) => a.parent === card.parent).map((a) => cardTag(a.number));
     const lines = [
       `The card to start: ${card.kind} "${card.title}".`,
+      `Works in: ${this.inPlace(card) ? "the shared project folder" : "a workspace of its own"}.`,
       card.body.trim(),
       project?.plan ? `It is workstream ${card.label ?? ''} of the project "${project.title}"; plan doc ${project.plan.file}.` : '',
       ...(await this.others(card, active, ahead)),
@@ -908,16 +992,17 @@ export class Coordinator {
   private async others(card: Item, active: Item[], ahead: Item[]): Promise<string[]> {
     const folder = !!this.o.repoFor(card).folder;
     // in a folder nothing is merged later: every path counts
-    const soft = folder ? [] : this.o.repoFor(card).adapter.softPaths;
+    const soft = folder || this.inPlace(card) || [...active, ...ahead].some((a) => this.inPlace(a)) ? [] : this.o.repoFor(card).adapter.softPaths;
     const described = folder ? (c: Change) => `${c.file} (${c.regions[0] ?? 'changed'})` : describe;
     const hard = (f: string) => !soft.some((s) => overlaps(normalize(f), s));
     /** A card in progress or ahead: its tag, title and first line, and what it is expected to change. */
     const head = (a: Item) => [
       `- ${cardTag(a.number)}: "${a.title}"${a.body ? ` — ${a.body.split('\n')[0]!.slice(0, 200)}` : ''}`,
-      `  expected to change: ${(a.scope ?? []).filter(hard).join(', ') || '(no estimate)'}`,
+      `  works in: ${this.inPlace(a) ? `the shared project folder (${a.state}; uncommitted changes still obstruct work)` : 'a workspace of its own'}`,
+      `  expected to change: ${this.expected(a).filter(hard).join(', ') || '(no estimate)'}`,
     ];
     // git reads the branches side by side, without holding up the server
-    const changes = await Promise.all(active.map((a) => this.o.repoFor(a).workspaces.changes(a.id)));
+    const changes = await Promise.all(active.map((a) => this.changesOf(a)));
     return [
       active.length
         ? `Cards in progress:\n${active
@@ -972,7 +1057,11 @@ export class Coordinator {
   /** A card keeps the time it came to the Coordinator for as long as it stays queued. */
   private setQueue(cardId: string, q: Wait | null, keep?: string) {
     const since = keep ?? this.o.board.item(cardId)?.queue?.since ?? new Date().toISOString();
-    this.o.board.work(cardId, { queue: q ? toJson({ ...q, since }) : null });
+    const titles = q && 'behind' in q ? Object.fromEntries(q.behind.flatMap((id) => {
+      const owner = this.projectOwners.get(id);
+      return owner?.archivedAt ? [[id, owner.title]] : [];
+    })) : {};
+    this.o.board.work(cardId, { queue: q ? toJson({ ...q, since, ...(Object.keys(titles).length ? { titles } : {}) }) : null });
   }
 
   private card(id: string): Item {
@@ -985,11 +1074,13 @@ export class Coordinator {
 const NAME_SYSTEM = (language: string) => `You name a card on Obeya, a canvas on which the owner directs coding agents. The owner wrote the card's task (below) without a title. Give it one with the tool title: in the language the task is written in (${language} where it tells none), short and precise like a ticket title (at most about 70 characters), saying what the task changes or achieves; no quotes, no full stop at the end. Then end your turn.`;
 
 const SYSTEM = (language: string) => `
-You are the Coordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Several workers work at the same time, each in its own workspace, and their branches are rebased onto the main branch one after the other. Your job here: before a card starts, estimate which files it will change, and judge whether running it next to the cards in progress is likely to end in merge conflicts. Only those keep it waiting, and for a workstream of a project what it builds on; everything else should run in parallel. Cards queued ahead of it count too: they came first and start before it, so a card likely to conflict with one of them waits behind it rather than overtaking it.
+You are the Coordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Workers run in the location listed for each card: a workspace of its own whose branch lands later, or directly in the shared project folder. Project-folder edits are visible immediately and can remain uncommitted after a task stops or is approved. Your job here: before a card starts, estimate which files it will change, and judge whether running it next to the cards in progress is likely to end in merge conflicts. Only those keep it waiting, and for a workstream of a project what it builds on; everything else should run in parallel. Cards queued ahead of it count too: they came first and start before it, so a card likely to conflict with one of them waits behind it rather than overtaking it.
 
 A workstream of a project builds on another workstream of it when it needs code, an API, data or a decision that the other one introduces, or the plan says it comes after it. It then waits until that one has landed, also when the owner has not started that one yet: the owner may start workstreams one by one, and starting this one now would build on what is not there. Read the plan doc for that.
 
-Sharing a file is not a conflict. Git merges changes to different places of the same file cleanly: new strings, types, routes, tests or functions added next to others; edits in different functions. A conflict is likely when both cards change the same lines or the same function or block, when one rewrites, moves, renames or reformats code the other one edits, or when both change the same small, tightly packed section (one config entry, one signature that both extend). For a card in progress you see what it is expected to change and the places it has changed so far (line ranges in its branch, with the enclosing function); read the code there when you need to.
+Between two isolated workspaces, sharing a file is not a conflict. Git merges changes to different places of the same file cleanly: new strings, types, routes, tests or functions added next to others; edits in different functions. A conflict is likely when both cards change the same lines or the same function or block, when one rewrites, moves, renames or reformats code the other one edits, or when both change the same small, tightly packed section (one config entry, one signature that both extend). For a card in progress you see what it is expected to change and the places it has changed so far (line ranges in its branch, with the enclosing function); read the code there when you need to.
+
+When either card works in the shared project folder, overlapping files or directories are a conflict even at different lines: two in-place tasks can overwrite each other, and a branch cannot land over uncommitted changes. Check both start orders against estimates and actual changes. No soft-path exclusion applies to these pairs. A stopped or approved task holds only its listed remaining uncommitted paths, until committed, discarded or superseded; becoming done alone does not free those paths.
 
 Read what you need in the repository (you cannot change files), then call scope exactly once:
 - files: repository-relative paths the card will most likely change; a path ending in "/" stands for a directory. Be concrete; list new files where you expect them.
@@ -1064,12 +1155,14 @@ Both empty: it starts now. A ${b.noun} that waits starts by itself once what it 
 const SCHEDULE_SYSTEM = (language: string, freed: boolean) => {
   const b = batchOf(freed, false);
   return `
-You are the Coordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Several workers work at the same time, each in its own workspace, and their branches are rebased onto the main branch one after the other. ${b.situation}
+You are the Coordinator of Obeya, a canvas on which the owner directs coding agents; the owner knows you simply as Obeya. Workers run in the location listed for each card: a workspace of its own whose branch lands later, or directly in the shared project folder. Project-folder edits are visible immediately and can remain uncommitted after a task stops or is approved. ${b.situation}
 
 A ${b.noun} waits for another when:
 - it depends on it: ${b.dependsOn}. It then waits until that one has landed.
-- running both at once likely ends in merge conflicts: both change the same lines or the same function or block, one rewrites, moves, renames or reformats code the other one edits, or both change the same small, tightly packed section. Sharing a file is not a conflict: changes in different places of a file merge cleanly.
+- running both at once likely ends in merge conflicts: both change the same lines or the same function or block, one rewrites, moves, renames or reformats code the other one edits, or both change the same small, tightly packed section. Between two isolated workspaces, sharing a file is not a conflict: changes in different places of a file merge cleanly.
 Everything else starts now and runs in parallel; parallel work is the point. When in doubt about a conflict, let it run: a conflict that happens anyway goes back to its worker. Cards in progress and queued ahead count as for any start: a ${b.noun} likely to conflict with one of them waits for it.
+
+When either card works in the shared project folder, overlapping files or directories are a conflict even at different lines: two in-place tasks can overwrite each other, and a branch cannot land over uncommitted changes. Check both start orders against estimates and actual changes. No soft-path exclusion applies to these pairs. A stopped or approved task holds only its listed remaining uncommitted paths, until committed, discarded or superseded; becoming done alone does not free those paths.
 
 Call schedule exactly once, with every ${b.noun} once, in the order they should go (what starts now first, then each one after what it waits for):
 - card: its tag.

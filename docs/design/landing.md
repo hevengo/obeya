@@ -53,6 +53,16 @@ fast-forward would overwrite, a push the remote turns away) goes to the owner, t
 review; its worker hears so with its next message, unless the work has landed by then, so it does
 not answer the owner as if the approval had not happened.
 
+When local changes still stop a landing, the refusal names the task or tasks whose recorded
+in-place edits match the affected dirty files, beside those file names. Shared tool windows can
+name several tasks. Attribution uses the current files, including changes retained after
+approval or stop, rather than a task's historical file list alone: committed, discarded,
+superseded or subsequently replaced versions do not assign an owner's later work to that task.
+Other local changes keep git's existing refusal without a task attribution. Scheduling is an
+early check, not a lock: an underestimated change, a concurrent tool or “Start anyway” can still
+reach this guard. The refused landing leaves the checkout's changes intact and the landing card
+in review, as above.
+
 Where a `pr` repository's settings allow `direct`, the owner may approve "Straight to main": in the
 card's clone or worktree Obeya fetches, rebases onto `origin/<default>` and runs `git push origin
 HEAD:<default>`, never forced. A push refused because the branch moved is rebased and pushed once

@@ -266,7 +266,7 @@ describe('Coordinator', () => {
     await settle();
     const brief = estimates().at(-1)!.inbox[0]!;
     expect(brief).toContain('Cards queued ahead of this one');
-    expect(brief).toContain(`- ${tag(b)}: "B"\n  expected to change: src/a.ts, src/b.ts\n  waits for: "A"`);
+    expect(brief).toContain(`- ${tag(b)}: "B"\n  works in: a workspace of its own\n  expected to change: src/a.ts, src/b.ts\n  waits for: "A"`);
     await scope(['src/b.ts'], [tag(b)], 'Beide ändern render() in src/b.ts.');
     expect(item(c.id).queue).toMatchObject({ behind: [b.id], reason: 'Beide ändern render() in src/b.ts.' });
     expect(board.events(c.id).some((e) => e.text.includes('„B“ (wartet selbst und ist vorher dran)'))).toBe(true);
@@ -506,7 +506,7 @@ describe("Coordinator queues a review's follow-up tasks", () => {
     // the first does not start before the turn has seen the second
     expect(item(f1.id).queue).toMatchObject({ checking: true });
     const brief = schedules().at(-1)!.inbox[0]!;
-    expect(brief).toContain(`${tag(f1)}: task "Explain the arrows" — Tooltips on the arrows.`);
+    expect(brief).toContain(`${tag(f1)}: task "Explain the arrows" (works in: a workspace of its own) — Tooltips on the arrows.`);
     expect(brief).toContain(`${tag(f2)}: task "Say why a link is refused"`);
     await schedule([
       [tag(f2), ['src/ui/arrow.tsx'], [], [], 'Bringt die Meldung neben dem Pfeil.'],

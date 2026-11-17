@@ -301,6 +301,16 @@ async function rebaseOnto(ws: string, onto: string, base: string): Promise<LandP
   }
 }
 
+/** Dirty paths an incoming tree could overwrite, including file/directory replacements. */
+async function checkoutObstructions(repo: string, tip: string): Promise<string[]> {
+  const [changed, dirty, fresh] = await Promise.all([
+    gitNames(repo, [...LOOK, 'diff', '--name-only', '--no-renames', '-z', 'HEAD', tip]),
+    gitNames(repo, [...LOOK, 'diff', '--name-only', '--no-renames', '-z', 'HEAD']),
+    gitNames(repo, [...LOOK, 'ls-files', '--others', '--exclude-standard', '-z']),
+  ]);
+  return [...new Set([...dirty, ...fresh])].filter((p) => changed.some((f) => p === f || p.startsWith(`${f}/`) || f.startsWith(`${p}/`)));
+}
+
 /**
  * Brings the workspace's committed branch onto `upstream` (`base` itself, or the commit it stands at
  * where the workspace has it from elsewhere) as `rebaseOnto` does: what stands in the way of landing
@@ -562,6 +572,10 @@ const SHORT_TEXT = { none: 'no workspace registered or all are leased', dirty: '
 export interface CardWorkspaces {
   /** Per-card tracking when a git repository also runs tasks in its checkout. */
   folderFor?(cardId: string): import('./folder').FolderWorkspaces | null;
+  /** Resolved run location, or the location a queued card would take now. */
+  placeFor?(cardId: string): 'project-folder' | 'workspace';
+  /** Still-uncommitted, attributable changes in the shared checkout, including finished cards. */
+  projectChanges?(): Promise<Map<string, Change[]>>;
   readonly mode: 'clones' | 'worktrees' | 'folder';
   readonly dir: string;
   readonly pooled: boolean;
@@ -1592,7 +1606,8 @@ export class Workspaces implements CardWorkspaces {
         const moved = !(await isAncestor(repo, 'HEAD', tip, true));
         if (moved && attempt === 0) continue;
         // else typically local changes in the Obeya checkout that the fast-forward would overwrite
-        return { code: moved ? 'land' : 'landMerge', worker: false, detail: messageOf(e) };
+        const files = moved ? [] : await checkoutObstructions(repo, tip);
+        return { code: moved ? 'land' : 'landMerge', worker: false, detail: messageOf(e), files };
       }
     }
   }

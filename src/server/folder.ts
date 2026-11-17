@@ -20,8 +20,8 @@ import type { Store } from './db';
 import { spawnOutput } from './spawn';
 import { observeOwnWrites } from './own-writes';
 import { writesNothing } from './shell';
-import { type CardWorkspaces, type Change, type FileAt, ownFile, type LandProblem, type Landed, type Lease } from './workspaces';
-import { GIT, WorkspaceError } from './git';
+import { type CardWorkspaces, type Change, type FileAt, ownFile, type LandProblem, type Landed, type Lease, worktreeNames } from './workspaces';
+import { GIT, gitNames, LOOK, WorkspaceError } from './git';
 
 /** A file or directory as the manifest has it. */
 export interface Entry {
@@ -242,6 +242,18 @@ async function hashFile(path: string, size: number): Promise<string | undefined>
   }
 }
 
+/** Hash an index blob without text decoding, using the same content hash as file tracking. */
+async function hashBlob(root: string, blob: string): Promise<string | null> {
+  const child = Bun.spawn([GIT, '-C', root, 'cat-file', 'blob', blob], { stdout: 'pipe', stderr: 'pipe' });
+  const content = (async () => {
+    const hash = new Bun.CryptoHasher('sha1');
+    for await (const chunk of child.stdout) hash.update(chunk);
+    return hash.digest('hex');
+  })();
+  const [code, hash] = await Promise.all([child.exited, content, new Response(child.stderr).text()]);
+  return code === 0 ? hash : null;
+}
+
 /** Copies `src` to `dst` (its directories made), a clone where the file system can, keeping its mtime. */
 async function copyKeeping(src: string, dst: string, force = false) {
   await mkdir(join(dst, '..'), { recursive: true });
@@ -283,6 +295,10 @@ interface Tracked {
   shared?: true;
   /** Replaced by an Obeya write: never restore this earlier version over it. */
   superseded?: true;
+  /** This recorded version was committed, discarded or replaced; history is kept separately. */
+  attributionEnded?: true;
+  /** Observed versions from this attribution lifetime that may still be staged. */
+  versions?: string[];
   before?: Entry;
   after?: Entry;
 }
@@ -334,7 +350,13 @@ export function merge(list: Tracked[], c: RawChange, shared = false) {
   const overlaps = (t: Tracked) => at(c, t.path) || (t.from !== undefined && at(c, t.from));
   const guarded = list.some((t) => t.shared && overlaps(t));
   const superseded = list.some((t) => t.superseded && overlaps(t));
+  const versions = list.filter((t) => overlaps(t) && !t.attributionEnded).flatMap((t) => [...(t.versions ?? []), ...(t.after?.hash ? [t.after.hash] : [])]);
   mergeOne(list, c);
+  const current = list.find((t) => t.path === c.path && !!t.dir === !!c.dir);
+  if (current) {
+    delete current.attributionEnded;
+    current.versions = [...new Set([...versions, ...(c.after?.hash ? [c.after.hash] : [])])];
+  }
   // whatever entry the change went into is no longer this card's alone
   if (shared || guarded || superseded) {
     const t = list.find((x) => x.path === c.path && !!x.dir === !!c.dir) ?? (list.length > before ? list.at(-1) : undefined);
@@ -536,6 +558,7 @@ export class FolderWorkspaces implements CardWorkspaces {
             let changed = false;
             for (const t of rec.changes) if (t.path === path || t.from === path) {
               t.superseded = true;
+              t.attributionEnded = true;
               changed = true;
             }
             if (changed) this.save(id, rec);
@@ -744,6 +767,54 @@ export class FolderWorkspaces implements CardWorkspaces {
   /** What the card changed, for the Coordinator: each path with what happened to it. */
   async changes(cardId: string): Promise<Change[]> {
     return this.changed(cardId);
+  }
+
+  /** Live obstacles, separate from the historical change list. Read during open tool windows too. */
+  async projectChanges(): Promise<Map<string, Change[]>> {
+    if (!this.o.git) return new Map();
+    return this.serial(async () => {
+      const ids = this.store.folderCardIds(this.root);
+      if (!ids.length) return new Map<string, Change[]>();
+      await this.scanNow();
+      const named = [...new Set(ids.flatMap((id) => (this.rec(id)?.changes ?? []).flatMap((t) => [t.path, ...(t.from ? [t.from] : [])])))];
+      const [dirty, fresh, ignored, indexed] = await Promise.all([
+        worktreeNames(this.root, 'HEAD', ['--no-renames']),
+        gitNames(this.root, [...LOOK, 'ls-files', '--others', '--exclude-standard', '-z']),
+        named.length ? gitNames(this.root, [...LOOK, 'ls-files', '--others', '--ignored', '--exclude-standard', '-z', '--', ...named.map((p) => `:(literal)${p}`)]) : Promise.resolve([]),
+        gitNames(this.root, [...LOOK, 'diff', '--cached', '--name-only', '--no-renames', '-z', 'HEAD']),
+      ]);
+      const pending = new Set([...dirty, ...fresh, ...ignored]);
+      const staged = new Set(indexed);
+      const result = new Map<string, Change[]>();
+      for (const id of ids) {
+        const changes: Change[] = [];
+        const record = this.rec(id);
+        let retired = false;
+        for (const t of record?.changes ?? []) {
+          if (t.dir || t.attributionEnded) continue;
+          const now = await entryAt(join(this.root, t.path));
+          // A staged version can remain even after the working file was replaced.
+          let matches = t.kind === 'deleted' ? !now : await unchanged(join(this.root, t.path), t.after, now);
+          if (!matches && staged.has(t.path)) {
+            const entries = await gitNames(this.root, [...LOOK, 'ls-files', '--stage', '-z', '--', `:(literal)${t.path}`]);
+            const blob = entries.map((e) => /^\d+ ([a-f0-9]+) 0\t/.exec(e)?.[1]).find(Boolean);
+            const versions = new Set([...(t.versions ?? []), ...(t.after?.hash ? [t.after.hash] : [])]);
+            matches = (t.kind === 'deleted' && !entries.length) || (!!blob && versions.has(await hashBlob(this.root, blob) ?? ''));
+          }
+          // A later owner edit is not attributed to this task. Shared windows keep every claimant.
+          if (![t.path, ...(t.from ? [t.from] : [])].some((p) => pending.has(p)) || !matches) {
+            t.attributionEnded = true;
+            retired = true;
+            continue;
+          }
+          for (const file of [t.path, ...(t.from ? [t.from] : [])])
+            if (pending.has(file)) changes.push({ file, regions: [t.kind] });
+        }
+        if (retired && record) this.save(id, record);
+        if (changes.length) result.set(id, changes);
+      }
+      return result;
+    });
   }
 
   /** What the card changed, as `changes` has it, read at once from what Obeya recorded. */

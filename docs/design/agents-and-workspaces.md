@@ -447,7 +447,7 @@ pull request reviews, workstreams and builds based on a prototype keep their own
 checkout registered in the clone pool cannot be used in place; this mode runs locally only.
 Each run's resolved place is stored when it starts and survives stop/resume, server restarts and
 changes to the default. Existing runs in isolated workspaces stay there. Slots still cap busy
-workers. Per-task selection is not offered yet.
+workers across both locations. Per-task selection is described under Workspaces above.
 
 The worker is told that the owner, other tasks and Obeya landings can edit concurrently, to leave
 unrelated work alone and make no commit or branch switch unless explicitly asked. Setup is skipped;
@@ -467,8 +467,8 @@ unrelated concurrent changes remain observable. A concurrent edit to a file bein
 compared with the landed version, and discarding cannot restore a version from before that
 landing. Stopping or pausing a worker keeps tracking its foreground and background writes until the
 session exits, then takes the final snapshot before release or resume. Restarts drain the old
-tracker before starting its replacement. The existing landing refusal for local changes
-is unchanged; scheduling around them is not part of this mode yet.
+tracker before starting its replacement. See Scheduling in The Coordinator for conflicts and
+retained uncommitted work, and How work lands in Landing for refusals naming the responsible tasks.
 
 ### Folders without git
 
@@ -907,3 +907,13 @@ for its hooks), and what the repository's work needs.
   large repository (GitHub issue #2: 9,188 files, on Windows) or over SSH, `git status` in every free
   clone at each look held the server, on every canvas. Rejected: asking git while choosing; a start
   that waits for the look before taking a clone (slots and the queue would not see it taken meanwhile).
+
+- **Tasks may work directly in the project folder** (owner, 2026-11-13): it holds the app,
+  local configuration and large ignored files, existing uncommitted work and the owner's IDE.
+  A repository default plus a per-task departure covers both ordinary work and exceptions.
+  A second prepared clone would not expose the existing work or IDE edits. Leasing the checkout
+  on a task branch would take the read tree away from main and require a clean checkout, contrary
+  to the 2026-10-30 decision; instructions in a task alone would supply no change list or discard.
+  Workstreams stay isolated; line-level authorship, automatic commits and moving active runs
+  between locations are excluded. Tracking is file-level, with full filesystem clone undo where
+  supported and text coverage elsewhere, as for folders without git.

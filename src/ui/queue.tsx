@@ -120,7 +120,7 @@ export function waitedOn(ids: string[], items: Item[], name: (id: string) => str
   });
 }
 
-export type Behind = { behind: string[]; reason: string; manualWait?: string[] };
+export type Behind = Extract<NonNullable<Item['queue']>, { behind: string[] }>;
 
 /** Why a card waits behind others: the reason Obeya gave, or the owner's arrows where only they hold it. */
 export const waitReason = (q: Behind) => (q.behind.some((id) => !q.manualWait?.includes(id)) ? q.reason : t.queue.drawn);
@@ -130,6 +130,7 @@ export const forcedText = (q: Item['queue']) => (q && 'behind' in q && q.behind.
 
 /** What a card waits for and why: the waits Obeya inferred with their reason, then those the owner's arrows hold it for. */
 export function waitText(q: Behind, items: Item[], name?: (id: string) => string): string {
+  name ??= (id) => plain(items.find((i) => i.id === id)?.title ?? q.titles?.[id] ?? id);
   const drawn = q.behind.filter((id) => q.manualWait?.includes(id));
   const inferred = q.behind.filter((id) => !drawn.includes(id));
   if (!inferred.length) return `${t.queue.behind(waitedOn(drawn, items, name))} ${t.queue.drawn}`;
@@ -174,7 +175,7 @@ function QueueRow(p: {
       <span className="q-what">
         {plain(item.title)}
         <br />
-        <span className="hint">{item.queue && 'behind' in item.queue ? t.queue.behind(waitedOn(item.queue.behind, items)) : stateLabel(item)}</span>
+        <span className="hint">{item.queue && 'behind' in item.queue ? t.queue.behind(waitedOn(item.queue.behind, items, (id) => plain(items.find((i) => i.id === id)?.title ?? (item.queue && 'behind' in item.queue ? item.queue.titles?.[id] : undefined) ?? id))) : stateLabel(item)}</span>
         {p.failed && <span className="hint why">{p.failed}</span>}
       </span>
       {onOpen && (

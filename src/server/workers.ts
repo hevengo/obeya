@@ -1209,6 +1209,20 @@ export class Workers {
     // the demo goes out with the approval, also where it holds for the worker's next handover
     const trailer = this.o.onApproval?.(cardId) ?? undefined;
     const result = await (direct ? this.o.workspaces.pushToMain(cardId, trailer) : this.o.workspaces.landOnMain(cardId, row.branch!, trailer, !!this.o.adapter.push));
+    if ('code' in result && result.code === 'landMerge' && result.files?.length && this.o.workspaces.projectChanges) {
+      const changes = await this.o.workspaces.projectChanges();
+      const responsible = [...changes].flatMap(([id, paths]) => {
+        const files = paths.map((c) => c.file).filter((f) => result.files!.includes(f));
+        let task: Item | undefined;
+        try { task = this.o.board.card(id); } catch { return []; }
+        return task && files.length ? [`${this.o.board.t.quote(task.title)} (${files.join(', ')})`] : [];
+      });
+      if (responsible.length) {
+        const notice = this.o.board.t.worker.projectObstructions(responsible.join('; '));
+        result.detail += `\n${notice}`;
+        this.o.board.log(cardId, 'error', 'obeya', notice);
+      }
+    }
     if ('code' in result && !result.worker) {
       // the worker hears it with its next step, so it does not tell the owner the card still waits for their approval as if nothing had happened
       const text = `${NOT_LANDED} ${result.detail}\n\nThat is not in your work: the owner sees on the card what to do, and the card waits for their approval again.`;

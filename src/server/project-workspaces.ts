@@ -19,6 +19,8 @@ export function projectWorkspaces(store: Store, isolated: Workspaces, folder: Fo
   };
   return new Proxy(isolated, {
     get(target, property) {
+      if (property === 'placeFor') return resolvePlace;
+      if (property === 'projectChanges') return () => folder.projectChanges();
       if (property === 'leasable') return (overSlots = false, near: string | null = null, id?: string) =>
         id && resolvePlace(id) === 'project-folder' ? overSlots || isolated.hasLocalSlot() : isolated.leasable(overSlots, near);
       if (property === 'folderFor') return (id: string) => inPlace(id) ? folder : null;
