@@ -60,6 +60,30 @@ asks the server for the count (`GET /api/waiting-count?seen=<shown>`), which ans
 is another than the one shown, or after 50 s with the same, so the badge follows at once also while
 the window is closed.
 
+The installed, running desktop app also shows system notifications under Obeya's identity. It uses the same
+card transitions and wording as [notifications on the phone](running-obeya.md#notifications-on-the-phone),
+including failed landings and stuck agents. A single notification shows the card title and what it
+waits for, followed by the canvas name if there are several. Clicking brings Obeya to the front and
+opens that card on its canvas. The first notification goes out immediately. Events in the following
+minute are grouped at its end, leaving out cards resolved in the meantime. A group names its cards
+and opens "Needs you". Another minute follows each notification.
+
+The shell suppresses an automatic notification while its window is visible, focused and has been
+used in the last 30 seconds. Input and video playback count as use. The window can be behind another
+app, hidden, minimized, closed or idle in front when a notification arrives. Closing hides the
+window on macOS and minimizes it on Windows and Linux so it remains accessible from the taskbar or
+launcher. On Windows and Linux, "Quit Obeya" in Configuration → General stops Obeya.
+
+The native shell subscribes over the owner's loopback API with the owner key, independently of the
+webview and phone. It starts at the current position and resumes on reconnect, including across a
+server restart. A bounded journal retains pending transitions across server restarts and supersedes
+older entries for the same card. Existing waits and unread Coordinator answers never enter the feed. Browser sessions,
+tests and scratch servers raise no desktop notifications. Sound is requested as part of the system
+notification. System notification settings and Focus determine what the owner actually hears and sees.
+Windows and Linux delivery are untried (2026-11-18). Tauri reports Windows clicks while the toast is
+on screen. Click routing needs Obeya to still be running. Linux delivery, sound and click support
+depend on the desktop's notification server.
+
 The page gets the microphone without a webview prompt (the system asks once for the app).
 
 macOS grants the local network and the microphone to the app a process counts as part of (its
@@ -390,6 +414,12 @@ no list.
   the page setting the badge through the webview, which would also have needed the page to be
   allowed a call into the shell. The count is the bar's, so the icon and the canvas never disagree;
   rejected: counting cards alone, which the bar's button does not.
+- **Use Tauri's notification plugin** (owner, 2026-11-18): it supplies delivery and
+  activation on macOS and Windows. Its legacy macOS delegate has a foreground presentation
+  callback so a sample and an alert after idle time can surface while the window is in front.
+  Linux uses the library beneath the plugin to request silent delivery explicitly. The plugin
+  only exposes the sound name on Linux. Rejected: a separate modern macOS backend, a browser notification, and a system command run
+  by the server. A notification must have the app's identity and open a card in its window.
 - **DMG, NSIS installer, AppImage and .deb** (2026-10-06). Rejected: Flatpak and Snap, whose
   sandboxes get in the way of git, agents and the repositories. Windows on ARM once there is a
   machine to try it on.

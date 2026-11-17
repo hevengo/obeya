@@ -38,6 +38,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod badge;
+mod notifications;
 mod update;
 
 use std::{
@@ -662,13 +663,14 @@ fn window(app: &AppHandle, obeya: Arc<Obeya>, placed: Option<&Placed>) -> tauri:
     .inner_size(1440.0, 900.0)
     .min_inner_size(720.0, 480.0)
     .initialization_script(format!(
-      "window.obeyaApp = {{ version: {:?}, platform: {:?}, built: {}, handedOver: {} }};",
+      "window.obeyaApp = {{ version: {:?}, platform: {:?}, built: {}, handedOver: {}, notifications: {} }};",
       app.package_info().version.to_string(),
       std::env::consts::OS,
       // installed from a checkout: the commit it was built from, which the settings show
       option_env!("OBEYA_BUILT_COMMIT").filter(|c| !c.is_empty()).map_or("null".to_string(), |c| format!("{c:?}")),
       // started again: the page before may have handed over what a reload keeps (update.rs)
-      placed.is_some()
+      placed.is_some(),
+      notifications::installed()
     ))
     .on_permission_request(|_, kind| match kind {
       PermissionKind::Microphone => PermissionResponse::Allow,
@@ -760,7 +762,7 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     file.insert(&browser, 0)?;
   }
   // the default Quit (the app menu's last item) ends the app at once, which a Mac does not let an app
-  // put off: this one stops Obeya first, as closing the window does elsewhere
+  // put off: this one stops Obeya first
   if let Some(MenuItemKind::Submenu(own)) = items.first() {
     let n = own.items()?.len();
     own.remove_at(n - 1)?;
@@ -775,18 +777,25 @@ fn main() {
   // started again by the shell before it (`relaunch`)
   let placed = Placed::take(&home());
   *obeya.first.lock().unwrap() = placed.as_ref().map(|p| p.next.clone());
-  let builder = tauri::Builder::default();
+  let builder = tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)));
   // a window that was out of sight comes back so, and the app stays behind the one the owner is in
   #[cfg(target_os = "macos")]
   let builder = builder.activate_ignoring_other_apps(placed.as_ref().is_none_or(|p| p.visible));
+  #[cfg(not(target_os = "linux"))]
+  let builder = builder.plugin(tauri_plugin_notification::init());
   let app = builder
-    .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
     // the opener's functions only, not its plugin: that puts a script into the page that takes each click
     // on a link with target=_blank and hands it to the plugin over IPC, which the page may not call
     // (capabilities/window.json), so the click would do nothing; the shell opens such links itself
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
+    .invoke_handler(tauri::generate_handler![
+      notifications::notification_settings,
+      notifications::notification_sample,
+      notifications::notification_activity
+    ])
     .setup(move |app| {
+      app.manage(for_setup.clone());
       let handle = app.handle().clone();
       let _ = HOME.set(home());
       if cfg!(target_os = "macos") {
@@ -805,6 +814,7 @@ fn main() {
       window(&handle, for_setup.clone(), placed.as_ref())?;
       let updates = update::start(&handle, for_setup.clone());
       badge::start(&handle, for_setup.clone());
+      notifications::start(&handle, for_setup.clone())?;
       let obeya = for_setup.clone();
       thread::spawn(move || serve(handle, obeya, updates));
       Ok(())
@@ -827,6 +837,11 @@ fn main() {
         // as Mac apps do: the window goes, the app stays in the Dock
         if let Some(w) = main_window(app) {
           let _ = w.hide();
+        }
+      } else if notifications::installed() {
+        // Keep a way back through the taskbar, even before the next notification.
+        if let Some(w) = main_window(app) {
+          let _ = w.minimize();
         }
       } else if !quit(app, &obeya) {
         app.exit(0);

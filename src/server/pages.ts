@@ -10,6 +10,7 @@ import { needsYou, type Waiting, waitingIn, waitingOn } from '../core/card';
 import type { AppUpdates } from './app-update';
 import type { CanvasRuntime } from './canvas';
 import { type Push, startedWaiting } from './push';
+import type { DesktopNotifications } from './desktop-notifications';
 import type { Access } from './remote';
 import { oldLinuxBun } from './repo';
 import type { Restarter } from './self-update';
@@ -44,6 +45,7 @@ export interface PagesOptions {
   canvases: Served;
   access: Access;
   push: Push;
+  desktopNotifications?: DesktopNotifications;
   updates: AppUpdates;
   restarter?: Restarter;
   sources?: SourceUpdates;
@@ -322,18 +324,21 @@ export class Pages {
         const started = startedWaiting(seen, items);
         seen = new Map(items.map((i) => [i.id, i]));
         const several = this.o.canvases.all().length > 1;
-        this.o.push.waits(
-          started.map(({ item, kind }) => ({
-            card: item.id,
-            title: item.title,
-            kind,
-            ...(several ? { canvas: c.board.canvas.name } : {}),
-            still: () => {
-              const now = c.board.item(item.id);
-              return !!now && needsYou(now);
-            },
-          })),
-        );
+        const waits = started.map(({ item, kind }) => ({
+          card: item.id,
+          title: item.title,
+          kind,
+          ...(several ? { canvas: c.board.canvas.name } : {}),
+          since: item.waitingSince,
+        }));
+        this.o.push.waits(waits.map((w) => ({
+          ...w,
+          still: () => {
+            const now = c.board.item(w.card);
+            return !!now && needsYou(now);
+          },
+        })));
+        this.o.desktopNotifications?.waits(waits.flatMap((w) => w.since ? [{ ...w, since: w.since }] : []));
         const snapshot = c.board.snapshot();
         send({ type: 'snapshot', snapshot });
         // what the switchers show of it (its repositories, whether they run as configured) may have changed

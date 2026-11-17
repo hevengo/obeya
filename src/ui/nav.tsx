@@ -46,8 +46,8 @@ interface ListProps {
 const FOLD_KEY = 'obeya-nav-folded';
 
 /** The bar's button and the list under it. */
-export function NavPill(p: ListProps) {
-  const [open, setOpen] = useState(false);
+export function NavPill(p: ListProps & { initiallyOpen: boolean }) {
+  const [open, setOpen] = useState(p.initiallyOpen);
   const box = useRef<HTMLDivElement>(null);
   useMenuClose(open, box, () => setOpen(false), true);
   const home = p.canvas.repos[0];

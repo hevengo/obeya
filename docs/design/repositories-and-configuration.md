@@ -391,8 +391,9 @@ always where nothing hovers (touch). An unsaved draft survives per tab, also a r
 restart. Its sections, listed on the left and shown one at a time (the last one chosen per tab):
 Canvases, a heading with each canvas indented under it as a section of its own and "+ Canvas"
 last (see Canvases), Agents and models (also the usage limits in the bar and the costs), Voice input, Demos,
-Other devices (see Other devices) and General (languages, light or dark, the server); below them "Check setup" and "Report a wish or
-a bug" (see Wishes for Obeya's makers). Each canvas in the list marks its unsaved changes and
+Other devices (see Other devices), Notifications in the installed app, and General (languages, light
+or dark, the server). Below them are "Check setup" and "Report a wish or a bug" (see Wishes for
+Obeya's makers). Each canvas in the list marks its unsaved changes and
 counts its problems in red; the heading counts the problems of no one canvas (none at all, say). The file a
 section or block is saved in sits behind an info icon at its heading ("Saved in" and the path), shown
 while the pointer or focus is on the heading and always where nothing hovers (touch), where a tap
@@ -400,6 +401,12 @@ opens it; only a notice that matters stays visible (Obeya running with repositor
 line, where saving creates the file). Settings are rows of label and control, no boxes in
 boxes. What to know about a field sits behind an info icon at its label, shown only while the pointer
 or focus is on the field, its text appearing at once.
+
+"Notifications" controls [desktop notifications](distribution.md#app) on this computer.
+"Show a notification" and "Play a sound" start on, take effect immediately, and are saved in
+`desktop-notifications.json` in Obeya's home. Turning notifications off disables sound and the
+sample control and keeps the sound preference for when notifications are turned on again.
+"Try it" sends a sample with the chosen sound setting, including while actively using the app.
 
 The dialog shows the saved configuration at once and what it amounts to once checked ("Checking the
 repositories …" until then): problems, each repository's id and settings with their sources. The

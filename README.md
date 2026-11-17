@@ -138,6 +138,10 @@ the app's icon, and they are listed under "Needs you". Open such a card to answe
 watch the demo and click "Approve". Hold Space to say what to do instead of typing. `/` searches
 the cards on the canvas and in the archive, and `?` lists every key.
 
+The installed app also shows a system notification when a card starts waiting while you are away
+or the window is idle. Click it to open the card. In Configuration → Notifications, you can turn
+alerts or sound off or use "Try it" to send a sample.
+
 ### Connecting a phone
 
 1. Install [Tailscale](https://tailscale.com) on the computer and on the phone, both logged in as

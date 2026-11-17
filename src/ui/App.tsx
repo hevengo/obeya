@@ -62,8 +62,10 @@ import { captionKey } from './walkthrough';
 import { useLatest, useLive, useStable } from './latest';
 import { type Pos, useOptimisticItems } from './optimistic';
 import { useArchivedCards } from './archived';
+import { useDesktopActivity } from './desktopNotifications';
 
 export function App() {
+  useDesktopActivity();
   const [phone] = useState(phoneView);
   const [canvases, setCanvases] = useState<CanvasInfo[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -342,6 +344,7 @@ function Canvas({
   // where the search's list stands while open: a card behind it is out of sight
   const [searchCover, setSearchCover] = useState<DOMRect | undefined>(undefined);
   const [cOn, setCOn, cOnRef] = useLive(false);
+  const [showNeedsYou, setShowNeedsYou] = useState(() => new URLSearchParams(location.search).has('needs-you'));
   // the navigation pinned as a sidebar on the left (src/ui/nav.tsx)
   const [pinned, setPinned, pinnedRef] = useLive(loadPinned);
   const pin = (on: boolean) => {
@@ -692,7 +695,8 @@ function Canvas({
     const a = readAddress();
     const code = !a.canvas || a.canvas === snapshot.canvas.id ? a.card : undefined;
     const talk = new URLSearchParams(location.search).has('talk');
-    history.replaceState(history.state, '', `${code ? cardPath(snapshot.canvas.id, code) : canvasPath(snapshot.canvas.id)}${queryWithout(location.search, 'c', 'card', 'talk')}`);
+    if (showNeedsYou) setShowNeedsYou(false);
+    history.replaceState(history.state, '', `${code ? cardPath(snapshot.canvas.id, code) : canvasPath(snapshot.canvas.id)}${queryWithout(location.search, 'c', 'card', 'talk', 'needs-you')}`);
     // what comes back is what the address names already
     if (k) return address.load(() => reopen(k));
     if (sheetLeft || talk) {
@@ -1472,7 +1476,7 @@ function Canvas({
               {snapshot.canvas.name}
             </h1>
           ) : (
-            <NavPill {...nav} />
+            <NavPill {...nav} initiallyOpen={showNeedsYou && side.left === 0} />
           )}
           <SearchPill
             on={drop === 'search'}

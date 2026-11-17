@@ -81,7 +81,7 @@ touches, and keep those current in the same change.
 - [Running Obeya](design/running-obeya.md) — the server (who may talk to it, other devices, the
   phone view, notifications on the phone, stalls), setup assistant, setting up git in a folder,
   self-update (waiting for workers and the owner, pulling from the upstream), stopping.
-- [Distribution](design/distribution.md) — how Obeya gets to people: one file, the app, builds
+- [Distribution](design/distribution.md) — how Obeya gets to people: one file, the app and desktop notifications, builds
   (signing, making a release), app updates, the site, the hero video.
 - [Data](design/data.md) — what Obeya stores in SQLite and under `~/.obeya/`, and what it derives.
 - [Open questions](#open-questions) — below.

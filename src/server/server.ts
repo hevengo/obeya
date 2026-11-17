@@ -44,7 +44,8 @@ import { claudeLoginFailed, codexLoginLost } from '../core/login';
 import { ownerSetup, type HarnessSetups } from './harness-setup';
 import { VERSION } from './resources';
 import { footerOf } from './wish';
-import { serving } from './owner';
+import { KEY_HEADER, serving } from './owner';
+import type { DesktopNotifications } from './desktop-notifications';
 import type { Stalls } from './stalls';
 
 type Req = Request & { params: Record<string, string> };
@@ -146,6 +147,7 @@ export interface ServeDeps {
   access?: Access;
   /** What goes to the devices that turned notifications on. */
   push?: Push;
+  desktopNotifications?: DesktopNotifications;
   /** New commits on the upstream of the checkout Obeya runs from; none for the app or the compiled binary. */
   sources?: SourceUpdates;
   /** The plans' usage limits for the bar, fetched while the owner has it show them and a page is open. */
@@ -288,8 +290,9 @@ function accessRoutes(x: Routing) {
 
 /** Obeya itself: the canvases and what waits on them, restarting and stopping, the app's shell and its updates, the pages' WebSockets. */
 function appRoutes(x: Routing) {
-  const { pages, updates, sources, restarter, stop } = x;
+  const { pages, updates, sources, restarter, stop, here, desktopNotifications } = x;
   const handOver = new HandOver();
+  const hasCanvas = (id: string) => !!pages.canvas(id);
   return area({
     // what waits for the owner, counted as the bar's button counts it, for the app's icon (app/src/badge.rs);
     // `seen`: the count shown there, and the answer waits until it is another (at most 50 s)
@@ -310,6 +313,11 @@ function appRoutes(x: Routing) {
           req.signal.addEventListener('abort', done);
         });
       },
+    },
+    '/api/desktop-notifications': {
+      // The common owner guard checks the key. A browser cookie alone is insufficient for this feed.
+      GET: here((req) => req.headers.has(KEY_HEADER) && desktopNotifications ? handle(() => desktopNotifications.poll(new URL(req.url), req.signal, hasCanvas)) : notFound()),
+      POST: here((req) => req.headers.has(KEY_HEADER) && desktopNotifications ? handle(async () => desktopNotifications.message(await fields(req), hasCanvas)) : notFound()),
     },
     '/api/canvases': { GET: () => Response.json(pages.list()) },
     // the owner has a restart that waits for workers go ahead at once
@@ -1096,7 +1104,7 @@ export function serve(served: Served | CanvasRuntime[], port: number, deps: Serv
       }
     : access;
   const canvases = Array.isArray(served) ? { all: () => served } : served;
-  const pages = new Pages({ canvases, access, push, updates, restarter, sources, usage, stalls, costs: () => !!config && switchView(config.home, 'costs').on });
+  const pages = new Pages({ canvases, access, push, desktopNotifications: deps.desktopNotifications, updates, restarter, sources, usage, stalls, costs: () => !!config && switchView(config.home, 'costs').on });
   const x: Routing = {
     ...deps,
     updates,

@@ -12,6 +12,7 @@ import { DEFAULT_CODE_VIDEO } from '../core/code-video';
 import { parseTagLines, tagLines } from '../core/page-tags';
 import { knownLanguage, LANGUAGES } from '../core/locale';
 import { AccessSection } from './access';
+import { desktopNotification, type DesktopNotificationSettings } from './desktopNotifications';
 import { effortsOf, HarnessUpdate, modelLabel } from './agentPick';
 import { api, reload, type SiteHow, failText } from './api';
 import { useAct, useLoaded, usePoll } from './act';
@@ -36,7 +37,7 @@ declare global {
      * In the app's window (app/src/main.rs); `built`: installed from a checkout, the commit it was built
      * from; `handedOver`: its shell started again, and the page before handed over what a reload keeps.
      */
-    obeyaApp?: { version: string; platform: string; built?: string | null; handedOver?: boolean };
+    obeyaApp?: { version: string; platform: string; built?: string | null; handedOver?: boolean; notifications?: boolean };
     /** Called by the app before its shell starts again while the server runs on (`handOver`). */
     obeyaHandOver?: (token: string) => Promise<void>;
   }
@@ -48,8 +49,9 @@ type Checked = Pick<ConfigChecked, 'resolved' | 'problems'>;
 type Ask = (text: string, canvas?: string) => void;
 
 /** The dialog's sections, in the order its list shows them. */
-type Section = 'canvases' | 'agents' | 'voice' | 'demos' | 'devices' | 'general';
-const SECTIONS: Section[] = ['canvases', 'agents', 'voice', 'demos', 'devices', 'general'];
+type Section = 'canvases' | 'agents' | 'voice' | 'demos' | 'devices' | 'notifications' | 'general';
+const SECTIONS: Section[] = ['canvases', 'agents', 'voice', 'demos', 'devices', 'notifications', 'general'];
+const configSections = () => SECTIONS.filter((s) => s !== 'notifications' || window.obeyaApp?.notifications);
 // the section shown, per tab: a new language reloads the page (as a save that restarts Obeya does), and the dialog comes back at it
 const SECTION_KEY = 'obeya-config-section';
 
@@ -82,7 +84,7 @@ export const showDevicesSection = () => write(session, SECTION_KEY, 'devices');
 /** The section this tab showed last, if any. */
 const keptSection = () => {
   const s = read(session, SECTION_KEY) as Section | null;
-  return s && SECTIONS.includes(s) ? s : null;
+  return s && configSections().includes(s) ? s : null;
 };
 
 /** A repository's clone count (or its slots, or one of its settings, folded open) to show and focus when the dialog opens. */
@@ -326,7 +328,7 @@ export function ConfigDialog({ on, page, onClose, onSetup, onAsk, onTalk, onProb
             </button>
           </div>
           <ul>
-            {SECTIONS.map((s) =>
+            {configSections().map((s) =>
               s === 'canvases' ? (
                 <li key={s} className="cfg-nav-group">
                   {/* a heading over the canvases, each of them a section of its own */}
@@ -455,6 +457,11 @@ export function ConfigDialog({ on, page, onClose, onSetup, onAsk, onTalk, onProb
           <section className="cfg-sec" hidden={section !== 'devices'}>
             <AccessSection on={on && section === 'devices'} onConnect={onConnect} />
           </section>
+          {on && section === 'notifications' && (
+            <section className="cfg-sec">
+              <DesktopNotifications />
+            </section>
+          )}
           <section className="cfg-sec" hidden={section !== 'general'}>
             <Head title={c.sections.general} />
             <LanguageBlock on={on} />
@@ -665,6 +672,7 @@ function Canvases({ view, rows, n, checked, changed, busy, focus, onAsk, onReche
 /** The server's own settings, from its command line: shown, not changed here. */
 function ServerBlock({ server }: { server: ConfigView['server'] }) {
   const c = t.config;
+  const { act, status, busy } = useAct();
   return (
     <>
       <Head sub title={c.server} />
@@ -696,6 +704,12 @@ function ServerBlock({ server }: { server: ConfigView['server'] }) {
         <button className="btn small" title={c.openInBrowserHint} onClick={() => window.open(location.href, '_blank')}>
           {c.openInBrowser}
         </button>
+      )}
+      {window.obeyaApp?.notifications && window.obeyaApp.platform !== 'macos' && (
+        <div>
+          <button className="btn small" disabled={busy} onClick={() => void act(api.quitApp)}>{c.quitApp}</button>
+          {status && <p className="hint c-status" role="status">{status}</p>}
+        </div>
       )}
     </>
   );
@@ -797,6 +811,40 @@ function ThemeBlock({ on }: { on: boolean }) {
         <Seg label={l.title} options={[null, ...THEMES]} value={view.chosen} name={(x) => (x ? l.names[x] : l.system)} onChange={choose} />
       </Field>
       {status && <p className="hint c-status">{status}</p>}
+    </>
+  );
+}
+
+function DesktopNotifications() {
+  const n = t.config.notifications;
+  const [settings, setSettings] = useState<DesktopNotificationSettings>();
+  const { act, busy, status } = useAct({ offline: n.failed });
+  useEffect(() => {
+    void act(async () => setSettings(await desktopNotification<DesktopNotificationSettings>('notification_settings')));
+  }, []);
+  const save = (change: Partial<DesktopNotificationSettings>) => act(async () => setSettings(await desktopNotification<DesktopNotificationSettings>('notification_settings', change)));
+
+  return (
+    <>
+      <Head title={t.config.sections.notifications} hint={n.hint} />
+      {settings && (
+        <div className="cfg-notifications">
+          <label className="c-check">
+            <span>{n.show}</span>
+            <input type="checkbox" role="switch" checked={settings.enabled} disabled={busy} onChange={(e) => void save({ enabled: e.target.checked })} />
+          </label>
+          <label className="c-check">
+            <span>{n.sound}</span>
+            <input type="checkbox" role="switch" checked={settings.sound} disabled={busy || !settings.enabled} onChange={(e) => void save({ sound: e.target.checked })} />
+          </label>
+          <div className="cfg-notification-sample">
+            <button className="btn small" disabled={busy || !settings.enabled} onClick={() => void act(() => desktopNotification('notification_sample', { title: n.sampleTitle, body: n.sampleBody }))}>
+              {n.try}
+            </button>
+          </div>
+        </div>
+      )}
+      {status && <p className="hint c-status" role="status">{status}</p>}
     </>
   );
 }

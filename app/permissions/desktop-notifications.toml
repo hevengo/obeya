@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "desktop-notifications"
+description = "Read and change desktop notification settings, report window activity, and request a sample notification."
+commands.allow = ["notification_settings", "notification_activity", "notification_sample"]

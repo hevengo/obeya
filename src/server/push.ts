@@ -74,6 +74,22 @@ export const plainTitle = (md: string) =>
     .replace(/[*_`~]+/g, '')
     .trim();
 
+/** The notification text shared by phone and desktop. */
+export function waitingText(cards: Pick<Waits, 'title' | 'kind' | 'canvas'>[], language: Language) {
+  const m = MESSAGES[language].push;
+  if (cards.length === 1) {
+    const w = cards[0]!;
+    return { title: clip(plainTitle(w.title), 160), body: clip([m[w.kind], w.canvas].filter(Boolean).join(' · '), 200) };
+  }
+  return { title: m.several(cards.length), body: clip(cards.map((w) => plainTitle(w.title)).join(' · '), 600) };
+}
+
+/** A card's address on its canvas, by short code. */
+export function cardUrl(store: Store, id: string): string {
+  const row = store.card(id);
+  return row ? `/c/${encodeURIComponent(row.canvas_id)}/card/${row.short}` : `/?card=${encodeURIComponent(id)}`;
+}
+
 export interface PushOptions {
   store: Store;
   /** Obeya's home, with the VAPID key; without one (a test) the key is made up in memory. */
@@ -210,18 +226,9 @@ export class Push {
 
   /** Clipped: a push carries at most about 4 KB, and a phone shows a few lines anyway. */
   private message(cards: Waits[]): PushMessage {
-    const m = MESSAGES[this.language()].push;
-    if (cards.length === 1) {
-      const w = cards[0]!;
-      return { title: clip(plainTitle(w.title), 160), body: clip([m[w.kind], w.canvas].filter(Boolean).join(' · '), 200), url: this.cardUrl(w.card), tag: w.card, at: this.now() };
-    }
-    return { title: m.several(cards.length), body: clip(cards.map((w) => plainTitle(w.title)).join(' · '), 600), url: '/', tag: 'several', at: this.now() };
-  }
-
-  /** Where tapping the push for a card leads: the card on its canvas, by its short code. */
-  private cardUrl(id: string): string {
-    const row = this.store.card(id);
-    return row ? `/c/${encodeURIComponent(row.canvas_id)}/card/${row.short}` : `/?card=${encodeURIComponent(id)}`;
+    const text = waitingText(cards, this.language());
+    const card = cards.length === 1 ? cards[0]!.card : undefined;
+    return { ...text, url: card ? cardUrl(this.store, card) : '/', tag: card ?? 'several', at: this.now() };
   }
 
   /** Sends `message` to every device that gets pushes; a subscription its push service no longer knows goes. */

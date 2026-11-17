@@ -76,6 +76,7 @@ import { COMPILED, resource, SELF, VERSION } from './resources';
 import { oldLinuxBun, onGitHub } from './repo';
 import { Access } from './remote';
 import { Push } from './push';
+import { DesktopNotifications } from './desktop-notifications';
 import { Awake } from './awake';
 import { HarnessSetups } from './harness-setup';
 import { claudeToken, hostName, hostNamed } from './hosts';
@@ -410,6 +411,7 @@ harnesses.lookAtHosts();
 const access = new Access({ store, home, language: () => ownerLanguage(home) });
 // and what starts waiting for the owner, pushed to the phones that turned notifications on
 const push = new Push({ store, home, language: () => ownerLanguage(home) });
+const desktopNotifications = scratchFrom === undefined ? await DesktopNotifications.open(store, () => ownerLanguage(home), home) : undefined;
 // while other devices may reach Obeya, the machine stays awake as long as a worker works, or the whole time
 const awake = new Awake({ wanted: () => access.awake() === 'always' || (access.awake() === 'works' && busy().length > 0) }).start();
 // what held the server up, or a page, for the owner to notice: in this log and in the home's stalls.log
@@ -427,6 +429,7 @@ async function shutdown(code: number) {
   transcriber.stop();
   narration.stop();
   await stopped;
+  await desktopNotifications?.saved();
   // the supervisor stays across a restart, and gives the entry up when it ends
   if (!process.env.OBEYA_SUPERVISED) (code === TAKEOVER ? takenOver : release)(home, process.pid);
   process.exit(code);
@@ -477,6 +480,7 @@ server = serve(canvases, Number(values.port), {
   updates,
   access,
   push,
+  desktopNotifications,
   sources,
   usage,
   stalls,

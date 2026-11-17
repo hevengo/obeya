@@ -50,7 +50,9 @@ owner's screenshots (`images/<canvas>/`), other files the owner dropped into a f
 (`settings.json`, `demo.json`, `voice.json`, `personal-site.json`), the owner's key (`owner.key`),
 the Claude token the owner gave Obeya (`claude-token`), where the running Obeya answers
 (`server.json`), the `tailscale serve` entry Obeya made (`tailscale-serve.json`), the key it signs
-pushes with (`vapid.json`), the app's server log (`app.log`) and its shell's failed rebuilds
+pushes with (`vapid.json`), desktop notification preferences (`desktop-notifications.json`) and the
+recent transitions it can deliver (`desktop-notification-events.json`), the app's server log
+(`app.log`) and its shell's failed rebuilds
 (`app-build.log`), the stalls of the server and its pages (`stalls.log`, see Running Obeya), voices
 and models (`voices/`), the workers' clones and worktrees (`workspaces/`), copies of both videos and
 transcripts from SSH hosts (`hosts/<host>/`), the read tree's worktrees (`read/`), the cards' undo

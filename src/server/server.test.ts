@@ -8,6 +8,7 @@ import { CanvasRuntime } from './canvas';
 import { Canvases } from './canvases';
 import type { Command } from './commands';
 import { Store } from './db';
+import { DesktopNotifications } from './desktop-notifications';
 import { AppUpdates } from './app-update';
 import { Restarter } from './self-update';
 import { SourceUpdates } from './source-update';
@@ -16,7 +17,7 @@ import type { NarrationHost } from './narration';
 import { KEY_HEADER, keyOf } from './owner';
 import { Stalls } from './stalls';
 import { serve, serveNarration } from './server';
-import { canvas, dir, eachTest, runtime, start } from './canvas-fixture';
+import { canvas, dir, eachTest, restart as restartCanvas, runtime, start, store } from './canvas-fixture';
 import { artifact, asOwner, commit, gitClone, gitRepo, handedOverOn, identify, noForge, until, silent } from './testing';
 import { RECHECK_MS } from './workspaces';
 import { git } from './git';
@@ -1346,6 +1347,85 @@ describe('cards that need the owner', () => {
     expect(await held).toBe(1);
     // one that shows another count hears at once
     expect(await count(0)).toBe(1);
+  });
+});
+
+describe('desktop notification feed', () => {
+  const route = '/api/desktop-notifications';
+  const poll = async (instance?: string, seen?: number, hold?: number) => {
+    const url = new URL(route, server.url);
+    if (instance) url.searchParams.set('instance', instance);
+    if (seen !== undefined) url.searchParams.set('seen', String(seen));
+    if (hold !== undefined) url.searchParams.set('hold', String(hold));
+    return (await (await fetch(url)).json()) as { instance: string; seen: number; events: { id: number; card: string }[] };
+  };
+
+  test('wakes for new card transitions and resolves the current batch using phone wording', async () => {
+    const existing = card();
+    board.work(existing.id, { state: 'waiting', need: 'demo' });
+    const shop = gitRepo(join(dir, 'shop'));
+    const second = await start({ id: 'shop', name: 'Shop', repos: [{ path: shop }] });
+    const question = second.board.create({ title: '**CSV export**', x: 1, y: 2 });
+    const landing = card();
+    board.work(landing.id, { state: 'waiting', need: 'demo', approved_at: new Date().toISOString() });
+    server.stop(true);
+    server = serve([canvas, second], 0, { transcriber: silent, desktopNotifications: new DesktopNotifications(store, () => 'en') });
+
+    const initial = await poll();
+    expect(initial.events).toEqual([]);
+    let heard = false;
+    const pending = poll(initial.instance, initial.seen, 500).then((response) => (heard = true, response));
+    board.patch(existing.id, { title: 'Already waiting' });
+    await sleep(25);
+    expect(heard).toBe(false);
+    second.board.work(question.id, { state: 'waiting', need: 'question' });
+    const first = await pending;
+    expect(first.events).toEqual([{ id: 1, card: question.id }]);
+    const message = (ids: number[]) => post(route, JSON.stringify({ instance: first.instance, ids }));
+    expect(await (await message([1])).json()).toEqual({ title: 'CSV export', body: 'A question for you · Shop', next: `/c/shop/card/${question.short}` });
+    board.work(landing.id, { state: 'waiting', need: 'demo', approved_at: null });
+    const later = await poll(first.instance, first.seen, 0);
+    expect(later.events).toEqual([{ id: 2, card: landing.id }]);
+    expect(await (await message([1, 2])).json()).toMatchObject({ title: '2 cards wait for you', body: 'CSV export · A', next: '/?needs-you' });
+    second.board.work(question.id, { state: 'working' });
+    expect(await (await message([1, 2])).json()).toMatchObject({ body: expect.stringContaining('Landing failed') });
+    expect((await message([1])).status).toBe(204);
+    expect((await poll(first.instance, later.seen, 0)).events).toEqual([]);
+  });
+
+  test('a pending batch survives a server restart while a newly opened app starts at the tip', async () => {
+    expect((await fetch(new URL(route, server.url))).status).toBe(404);
+    const startServer = async () => {
+      server.stop(true);
+      const desktopNotifications = await DesktopNotifications.open(store, () => 'en', dir);
+      server = serve([canvas], 0, { transcriber: silent, desktopNotifications });
+      return desktopNotifications;
+    };
+    const desktopNotifications = await startServer();
+    const initial = await poll();
+    const a = card();
+    board.work(a.id, { state: 'waiting', need: 'review' });
+    const first = await poll(initial.instance, initial.seen, 0);
+    expect(first.events).toEqual([{ id: 1, card: a.id }]);
+    await desktopNotifications.saved();
+    board = (await restartCanvas()).board;
+    const restarted = await startServer();
+    expect(await poll()).toEqual({ instance: initial.instance, seen: 1, events: [] });
+    const resolve = async (ids: number[]) => post(route, JSON.stringify({ instance: first.instance, ids }));
+    expect(await (await resolve([1])).json()).toEqual({ title: 'A', body: 'Ready for review', next: `/c/main/card/${a.short}` });
+
+    board.work(a.id, { state: 'working' });
+    await Promise.resolve(); // the previous wait ended in its own turn
+    board.patch(a.id, { title: `${'a'.repeat(158)}🚀 trailer` });
+    board.work(a.id, { state: 'waiting', need: 'question' });
+    expect((await poll(first.instance, initial.seen, 0)).events).toEqual([{ id: 2, card: a.id }]);
+    expect((await resolve([1])).status).toBe(204);
+    expect(await (await resolve([2])).json()).toMatchObject({ title: `${'a'.repeat(158)}…`, body: 'A question for you' });
+
+    const cookie = `obeya-${server.port}=${keyOf(server)}`;
+    expect((await globalThis.fetch(new URL(route, server.url), { headers: { cookie } })).status).toBe(404);
+    expect((await globalThis.fetch(new URL(route, server.url))).status).toBe(401);
+    await restarted.saved();
   });
 });
 

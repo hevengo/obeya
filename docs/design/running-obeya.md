@@ -345,6 +345,8 @@ sent (in a cache of its own) and tells an open page.
 
 #### Notifications on the phone
 
+The installed app uses the same transitions and wording for its own [desktop notifications](distribution.md#app).
+
 Obeya tells the owner's phone when something starts to wait for them, by Web Push to the browser's
 own push service: no account, no service of Obeya's. Messages are encrypted for the device (RFC 8291)
 and requests signed with Obeya's VAPID key (RFC 8292), with WebCrypto; the push service sees neither

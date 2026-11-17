@@ -161,6 +161,7 @@ export const api = {
   canvasOf: (id: string) => call<CanvasSnapshot>('GET', canvasApi(id, '/canvas')),
   /** Obeya's configuration, for all canvases. */
   config: () => call<ConfigView>('GET', '/api/config'),
+  quitApp: () => call<{ stopping: boolean }>('POST', '/api/stop'),
   /** What the configuration as saved amounts to, and what is wrong with it: it reads every repository, so it comes after `config`. */
   configCheck: () => call<ConfigChecked>('GET', '/api/config/check'),
   checkConfig: (canvases: CanvasConfig[]) => call<ConfigChecked>('POST', '/api/config/check', canvases),
