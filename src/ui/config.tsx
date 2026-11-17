@@ -5,7 +5,7 @@
 
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { type DemoSettings, type DemoSettingsView, type DemoSpaceView, type DemoVoiceCheck, type Language, type NarrationLanguage, type PageTags, type SetupCheck, type Theme, THEMES, type VoiceKind, type VoiceSetupView } from '../core/types';
-import { AGENT_ROLES, AGENT_SPEEDS, type AgentSpeed, type AgentEffort, type AgentRole, type AgentSetting, type Harness, HARNESSES, modelChoices } from '../core/agents';
+import { AGENT_ROLES, AGENT_SPEEDS, type AgentSpeed, type AgentEffort, type AgentRole, type AgentsView, type AgentSetting, type Harness, HARNESSES, modelChoices } from '../core/agents';
 import { blocksSaving, type CanvasConfig, type ConfigChecked, type ConfigProblem, type ConfigView, commandLines, type DemoSite, type PersonalSiteView, type SiteSetupJob, type TagProposalJob, type HostConfig, type RepoConfig, type RepoSettings, type RepoTrust, type RepoValues, type ResolvedCanvas, type SettingsShared, type SettingValue, layerSettings, SHARED_FIELDS, NESTED_SETTINGS, type NestedSetting, isNested, START_FAILED } from '../core/config';
 import { lineDiff } from '../core/diff';
 import { DEFAULT_CODE_VIDEO } from '../core/code-video';
@@ -23,6 +23,7 @@ import { FolderPick } from './folderPick';
 import { demoState, GitSetup, lastLine, platformName, RecognitionDetail, SetupList, useFolderWithoutGit, voiceState } from './setup';
 import { useFitHeight } from './fitHeight';
 import { useCopy } from './copy';
+import { CodexLogin, Reauthenticate } from './reauthenticate';
 import { fileSize, snoozeWhen, t } from './strings';
 import { applyTheme } from './theme';
 import { WishLink } from './wish';
@@ -834,7 +835,7 @@ function AgentsBlock({ on }: { on: boolean }) {
   const a = t.config.agents;
   const choose = (role: AgentRole, choice: Partial<AgentSetting>) => act(async () => setView(await api.saveAgents(role, choice)));
   const harness = (h: Harness) => view.harnesses.find((x) => x.id === h);
-  const unready = view.harnesses.filter((h) => !h.ready);
+  const unready = view.harnesses.filter((h) => !h.ready && !view.setups?.[h.id].separate);
   return (
     <>
       <Head title={a.title} hint={a.hint(view.preset)} file={view.file} />
@@ -896,7 +897,89 @@ function AgentsBlock({ on }: { on: boolean }) {
       ))}
       {unready.length > 0 && <p className="hint">{`${unready.map((h) => a.notReady(t.harnesses[h.id])).join(', ')}. ${a.setUp}`}</p>}
       {status && <p className="hint c-status">{status}</p>}
+      {view.setups && (
+        <section className="cfg-agent-setup" aria-label={a.setup.title}>
+          <h3>{a.setup.title}</h3>
+          <p className="hint">{a.setup.hint}</p>
+          <div className="cfg-agent-setups">
+            {HARNESSES.map((id) => <AgentSetup key={id} harness={id} view={view} onView={setView} />)}
+          </div>
+        </section>
+      )}
     </>
+  );
+}
+
+function AgentSetup({ harness, view, onView }: { harness: Harness; view: AgentsView; onView: (v: AgentsView) => void }) {
+  const setup = view.setups![harness];
+  const ready = view.harnesses.find((h) => h.id === harness);
+  const [draft, setDraft] = useState<string | null>(null);
+  const { status, busy, act } = useAct({ detail: ['invalid'] });
+  const [copied, copy] = useCopy(1500);
+  const a = t.config.agents.setup;
+  const folderId = useId();
+  const value = draft ?? setup.folder;
+  const save = (separate: boolean, folder?: string) => act(async () => {
+    onView(await api.saveAgentSetup(harness, separate, folder));
+    setDraft(null);
+  });
+  const action = (name: 'copy' | 'refresh') => act(async () => onView(await api.agentSetupAction(harness, name, setup.folder)));
+  const receipt = setup.copied;
+  const contents = receipt ? [
+    ...(receipt.settings ? [harness === 'codex' ? a.copiedCodexSettings : a.copiedSettings] : []),
+    ...(receipt.mcpServers ? [a.copiedMcp(receipt.mcpServers)] : []),
+    ...(receipt.instructions ? [a.copiedInstructions] : []),
+    ...(receipt.skills ? [a.copiedSkills(receipt.skills)] : []),
+    ...(receipt.commands ? [a.copiedCommands(receipt.commands)] : []),
+    ...(receipt.agents ? [a.copiedAgents(receipt.agents)] : []),
+  ] : [];
+  return (
+    <div className="cfg-agent-setup-card">
+      <h4>{t.harnesses[harness]}</h4>
+      <div className="seg cfg-agent-setup-modes" role="group" aria-label={t.harnesses[harness]}>
+        <button className={!setup.separate ? 'on' : undefined} aria-pressed={!setup.separate} disabled={busy} onClick={() => void save(false)}>{a.yours}</button>
+        <button className={setup.separate ? 'on' : undefined} aria-pressed={setup.separate} disabled={busy} onClick={() => void save(true)}>{a.theirs}</button>
+      </div>
+      {setup.separate && <>
+        <form className="cfg-agent-setup-folder" onSubmit={(e) => { e.preventDefault(); void save(true, value); }}>
+          <label className="hint" htmlFor={folderId}>{a.folder}</label>
+          <div className="c-row">
+            <input type="text" id={folderId} value={value} onChange={(e) => setDraft(e.target.value)} spellCheck={false} />
+            <button className="btn small" type="submit" disabled={busy || !value.trim() || value === setup.folder}>{a.saveFolder}</button>
+          </div>
+        </form>
+        <p className="hint">{a.consequence}</p>
+        {harness === 'codex' && <p className="hint">{a.sharedSkills}</p>}
+        <div className="cfg-agent-setup-login" key={setup.folder}>
+          <span className={ready?.ready ? 'setup-signed-in' : 'hint'}>{ready?.ready ? a.loggedIn : ready?.version ? a.loggedOut : a.missing}</span>
+          {!ready?.ready && ready?.version && <>
+            {harness === 'claude'
+              ? <>
+                <Reauthenticate folder={setup.folder} />
+                <button className="btn small" disabled={busy} onClick={() => void action('refresh')}>{a.checkLogin}</button>
+                <details><summary className="hint">{a.tokenFallback}</summary><Reauthenticate token folder={setup.folder} onLogin={() => void action('refresh')} /></details>
+              </>
+              : <CodexLogin host={null} folder={setup.folder} onLogin={() => void action('refresh')} />}
+          </>}
+        </div>
+        {setup.canCopy && <div className="cfg-agent-setup-copy">
+          <p className="hint">{a.noSettings}</p>
+          <p className="hint">{a.copyWarning}</p>
+          <button className="btn small" disabled={busy} onClick={() => void action('copy')}>{a.copySettings}</button>
+        </div>}
+        {receipt && <div className="cfg-agent-setup-copy" role="status">
+          <p>{a.copyResult(contents)}</p>
+          <p className="hint">{a.copyLeft}</p>
+          {contents.length > 0 && <p className="hint">{a.copyConsequence}</p>}
+        </div>}
+        {setup.alias && <div className="cfg-agent-setup-alias">
+          <p className="hint">{a.alias(t.harnesses[harness])}</p>
+          <code>{setup.alias}</code>
+          <button className="btn small" onClick={() => copy(setup.alias!)}>{copied ? a.aliasCopied : a.copyAlias}</button>
+        </div>}
+      </>}
+      {status && <p className="hint c-status" role="status">{status}</p>}
+    </div>
   );
 }
 

@@ -19,9 +19,9 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { messageOf } from '../core/text';
+import { clip, messageOf } from '../core/text';
 import { within, withTimeout } from '../core/late';
-import type { UsageLimit } from '../core/types';
+import type { Skill, UsageLimit } from '../core/types';
 import { type AgentEffort, type HarnessModel, AGENT_EFFORTS, codexFamily, codexFamilyName, newestOfFamilies } from '../core/agents';
 import type { ToolCall } from './folder';
 import { HostError, LOST, remote, sessionFiles, type SshHost } from './hosts';
@@ -32,6 +32,7 @@ import { codexCost, type CodexTokens } from './prices';
 import { OWN_GROUP, spawnOutput } from './spawn';
 import type { PlanLimits, UsageSource } from './usage';
 import { z } from 'zod';
+import { ensureSetup, setupEnv } from './harness-setup';
 
 type Env = Record<string, string | undefined>;
 
@@ -613,7 +614,9 @@ class CodexSession implements AgentSession {
       });
       server = new AppServer({ process: start({ command: bin, args: ['app-server', ...hooks.args(port, !!spec.watch, false)], cwd, env: { ...spec.env }, signal: new AbortController().signal }) });
     } else {
-      server = new AppServer({ bin, cwd, env: { ...cleanEnv(), ...spec.env }, args: hooks.args(hooks.port, !!spec.watch, process.platform === 'win32') });
+      if (spec.setup) ensureSetup(spec.setup);
+      const env = { ...cleanEnv(), ...spec.env };
+      server = new AppServer({ bin, cwd, env: spec.setup ? setupEnv('codex', spec.setup, env) : env, args: hooks.args(hooks.port, !!spec.watch, process.platform === 'win32') });
     }
     this.server = server;
     server.onNotification = (method, params) => this.heard(method, params);
@@ -924,7 +927,22 @@ async function listModels(server: AppServer): Promise<HarnessModel[]> {
 }
 
 /** The models Codex offers the login on this machine. */
-export const codexModels = (cwd: string): Promise<HarnessModel[]> => once(cwd, listModels);
+export const codexModels = (cwd: string, env?: Env): Promise<HarnessModel[]> => once(cwd, listModels, env);
+
+/** Lists the skills Codex enables for this working directory and setup, without starting a thread. */
+export function codexSkills(cwd: string, plugins: string[], env: Env): Promise<Skill[]> {
+  return once(cwd, async (server) => {
+    if (plugins.length) await server.request('skills/extraRoots/set', { extraRoots: plugins.map((p) => `${p}/skills`) }).catch(() => {});
+    await pluginsListed(server);
+    const { data } = await server.request<{ data: { skills: { name: string; description: string; enabled: boolean }[] }[] }>('skills/list', { cwds: [cwd] });
+    const skills = new Map<string, Skill>();
+    for (const group of data) for (const skill of group.skills) {
+      if (!skill.enabled || skills.has(skill.name)) continue;
+      skills.set(skill.name, { name: skill.name, description: clip(skill.description.trim().split('\n')[0] ?? '', 200) });
+    }
+    return [...skills.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, env);
+}
 
 /** The kind and group a window takes by its length: five hours is the session's, a week the week's. */
 function windowKind(minutes: number | null): { kind: string; group: string } {
@@ -957,13 +975,13 @@ export function codexUsageOf(r: { rateLimits?: RateSnapshot | null; rateLimitsBy
 }
 
 /** An idle app server in `cwd` asked for the login's rate limits; it sends no prompt, so it uses none of them. */
-export function codexUsage(cwd: string): UsageSource {
-  const bin = codexExecutable();
+export function codexUsage(cwd: string, env: Env = process.env): UsageSource {
+  const bin = codexExecutable(env);
   let server: AppServer | undefined;
   let ready: Promise<AppServer> | undefined;
   const open = () => {
     if (!bin) return Promise.reject(new Error(NOT_INSTALLED));
-    server = new AppServer({ bin, cwd, env: cleanEnv() });
+    server = new AppServer({ bin, cwd, env: cleanEnv(env) });
     const s = server;
     return s.init().then(() => s);
   };
@@ -998,16 +1016,16 @@ export class CodexLogins {
 
   constructor(private env: Env = process.env) {}
 
-  async start(host: SshHost | null): Promise<{ id: string; url: string }> {
+  async start(host: SshHost | null, env = this.env, onSignedIn?: () => void): Promise<{ id: string; url: string }> {
     for (const [id, l] of this.logins) if (l.state.state === 'waiting') this.end(id, { state: 'failed', error: 'another login started' });
     let server: AppServer;
     if (host) {
       const argv = host.argv(['codex', 'app-server'], { local: `localhost:${LOGIN_PORT}:localhost:${LOGIN_PORT}` });
       server = new AppServer({ process: spawn(argv[0]!, argv.slice(1), { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true }) });
     } else {
-      const bin = codexExecutable(this.env);
+      const bin = codexExecutable(env);
       if (!bin) throw new Error(NOT_INSTALLED);
-      server = new AppServer({ bin, cwd: tmpdir(), env: cleanEnv(this.env) });
+      server = new AppServer({ bin, cwd: tmpdir(), env: cleanEnv(env) });
     }
     const id = randomBytes(9).toString('base64url');
     const login = { state: { state: 'waiting' } as CodexLoginState, server };
@@ -1015,6 +1033,7 @@ export class CodexLogins {
     server.onNotification = (method, p) => {
       if (method !== 'account/login/completed' || (loginId && p.loginId && p.loginId !== loginId)) return;
       this.end(id, p.success ? { state: 'done' } : { state: 'failed', error: typeof p.error === 'string' ? p.error : 'the sign-in failed' });
+      if (p.success) onSignedIn?.();
     };
     try {
       await server.init();

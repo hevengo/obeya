@@ -65,8 +65,8 @@ import { type AgentRuntime, byHarness, endAgentsHere, withRest } from './runtime
 import { claim, release, restarting, running, takenOver } from './instance';
 import { recordingRuntime, replayRuntime } from './replay';
 import { findClaude, MachineSetup, updateClaude, updateCodex, welcome } from './machine';
-import { codexRuntime, codexUsage } from './codex';
-import { claudeModels, claudeNewest, codexNewest, Harnesses, hostClaude, hostCodex } from './harnesses';
+import { codexModels, codexRuntime, codexUsage } from './codex';
+import { claudeChannel, claudeModels, claudeNewest, codexNewest, findCodex, Harnesses, hostClaude, hostCodex } from './harnesses';
 import { addToPath, extendPath } from './path';
 import { headOf, installDependencies, ownCheckout, RESTART, RESTART_FROM_FILE, RESTART_PATIENCE_MS, Restarter, TAKEOVER, UPDATE, watchOwnCode } from './self-update';
 import { AppUpdates } from './app-update';
@@ -77,6 +77,7 @@ import { oldLinuxBun, onGitHub } from './repo';
 import { Access } from './remote';
 import { Push } from './push';
 import { Awake } from './awake';
+import { HarnessSetups } from './harness-setup';
 import { claudeToken, hostName, hostNamed } from './hosts';
 import { serve, serveNarration } from './server';
 import { LocalTranscriber, VoiceIn } from './voice';
@@ -314,15 +315,19 @@ const config = new Config({
     : {}),
 });
 // Claude Code and Codex on this machine: which one a group runs on when the owner chose none, and what the Configuration offers
+const harnessSetups = new HarnessSetups(home, store);
 const harnesses = new Harnesses({
   cwd: home,
   claude: async () => {
-    const c = await findClaude(process.env, COMPILED, process.platform, process.arch);
-    return c.version ? { version: c.version, loggedIn: c.loggedIn } : null;
+    const env = harnessSetups.env('claude');
+    const [c, channel] = await Promise.all([findClaude(env, COMPILED, process.platform, process.arch), claudeChannel(env)]);
+    return c.version ? { version: c.version, loggedIn: c.loggedIn, channel } : null;
   },
-  claudeModels,
-  claudeNewest: (channel) => claudeNewest(channel),
-  updateClaude: () => updateClaude(),
+  codex: async () => findCodex(harnessSetups.env('codex')),
+  codexModels: async (cwd) => codexModels(cwd, harnessSetups.env('codex')),
+  claudeModels: async (cwd) => claudeModels(cwd, undefined, harnessSetups.env('claude')),
+  claudeNewest: (channel) => claudeNewest(channel, harnessSetups.env('claude')),
+  updateClaude: () => updateClaude(undefined, harnessSetups.env('claude')),
   codexNewest,
   updateCodex: () => updateCodex(),
   // the hosts the configuration names now, once a canvas has them registered
@@ -339,6 +344,7 @@ canvases = await Canvases.start(
     store,
     home,
     runtime: agentRuntime(),
+    harnessSetups,
     ...(idleWorkers ? { idleWorkers: true } : {}),
     forge,
     permissionMode: values['permission-mode'] as 'auto',
@@ -364,8 +370,14 @@ function agentRuntime() {
   // (`OBEYA_REST_AFTER`, in seconds, for demos and live checks)
   const rest = process.env.OBEYA_REST_AFTER ? Number(process.env.OBEYA_REST_AFTER) * 1000 : undefined;
   // an alias goes to Claude Code (here, or on the host the agent runs on) as the newest model of its family it lists, which the alias may not name yet
-  const newest: AgentRuntime = { start: (spec, ...more) => sdkRuntime.start(spec.model ? { ...spec, model: harnesses.claudeModel(spec.model, hostName(spec.cwd) ?? undefined) } : spec, ...more) };
-  const live = byHarness({ claude: withRest(newest, rest), codex: withRest(codexRuntime, rest) });
+  const rested = withRest(sdkRuntime, rest);
+  const newest: AgentRuntime = { start: (spec, ...more) => {
+    const host = hostName(spec.cwd) ?? undefined;
+    const active = harnessSetups.at('claude');
+    const current = !spec.setup || (spec.setup.folder === active.folder && spec.setup.mode === active.mode);
+    return rested.start(spec.model && (host || current) ? { ...spec, model: harnesses.claudeModel(spec.model, host) } : spec, ...more);
+  } };
+  const live = harnessSetups.runtime(byHarness({ claude: newest, codex: withRest(codexRuntime, rest) }));
   if (values.record) return recordingRuntime(live, resolve(values.record), home);
   if (!values.replay) return live;
   const refusedFile = join(home, 'replay-refused.txt');
@@ -383,13 +395,13 @@ const sources = own ? new SourceUpdates(own) : undefined;
 // the plan's usage limits in the bar, while the owner has it show them and a page is open
 const usage = new UsageMeters(
   [
-    { harness: 'claude', meter: new UsageMeter(() => claudeUsage(home)) },
-    { harness: 'codex', meter: new UsageMeter(() => codexUsage(home)) },
+    { harness: 'claude', meter: new UsageMeter(() => claudeUsage(home, harnessSetups.env('claude'))) },
+    { harness: 'codex', meter: new UsageMeter(() => codexUsage(home, harnessSetups.env('codex'))) },
   ],
   { on: switchView(home, 'usageMeter').on, ready: (h) => harnesses.ready(h) },
 );
 harnesses.onChange(() => (usage.update(), usage.changed()));
-const machine = new MachineSetup({ home, config, voice: voiceSetup, harnesses });
+const machine = new MachineSetup({ home, config, voice: voiceSetup, harnesses, harnessSetups });
 // the canvas the assistant created gets a first card that says what to try
 welcome(home, canvases.all());
 // Claude Code on the hosts the canvases registered, so the first menu of models has whether it is behind there
@@ -469,6 +481,7 @@ server = serve(canvases, Number(values.port), {
   usage,
   stalls,
   harnesses,
+  harnessSetups,
   ...(scratch ? { used: () => scratch.used() } : {}),
 });
 scratch?.start();

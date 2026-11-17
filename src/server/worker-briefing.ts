@@ -2,7 +2,8 @@
 // message that starts its session, for a card of the repository, a review card and a card in a
 // folder without git.
 
-import { basename } from 'node:path';
+import { basename, join } from 'node:path';
+import { sessionHarness } from './runtime';
 import { DEFAULT_DEMO_DIRECTORY } from '../../plugin/skills/demo/lib/settings.ts';
 import { type Language, LANGUAGE_NAMES, ownersLanguage, repositoryLanguage } from '../core/locale';
 import { dimensions } from '../core/page-tags';
@@ -108,8 +109,12 @@ ${inPlace ? '- Leave unrelated work alone. Make no commit or branch switch unles
    * does not know it, by its file, on the machine the card's workspace is on.
    */
   demoSkill(cardId: string): string {
-    const there = remote(this.o.board.row(cardId).workspace);
-    const [name, file] = there ? [DEMO_SKILL, `~/${HOST_DIR}/${basename(OBEYA_PLUGIN)}/skills/demo/SKILL.md`] : [demoSkillName(), DEMO_SKILL_FILE];
+    const row = this.o.board.row(cardId);
+    const there = remote(row.workspace);
+    const harness = row.session_id ? sessionHarness(row.session_id) : this.o.board.item(cardId)?.agent?.harness ?? this.o.harness?.() ?? 'claude';
+    const setup = this.o.harnessSetups?.at(harness, row.session_id);
+    const skills = setup ? join(setup.folder, 'skills') : undefined;
+    const [name, file] = there ? [DEMO_SKILL, `~/${HOST_DIR}/${basename(OBEYA_PLUGIN)}/skills/demo/SKILL.md`] : [demoSkillName(skills), DEMO_SKILL_FILE];
     return `the demo skill (\`${name}\`; if your session does not know it, read its file ${file} and follow that)`;
   }
 

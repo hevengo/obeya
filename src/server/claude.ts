@@ -31,6 +31,8 @@ import type { ToolCall, ToolWatch } from './folder';
 import { messageOf } from '../core/text';
 import { within } from '../core/late';
 
+import { claudeStateFile, ensureSetup, ownerSetup, setupEnv } from './harness-setup';
+
 const READ_ONLY_TOOLS = ['Read', 'Grep', 'Glob'];
 
 /** From the checkout: the machine's own Claude Code, once a look found it newer than the SDK's (`findClaude`). */
@@ -74,7 +76,7 @@ export function chromeAvailable(env: Record<string, string | undefined> = proces
   if (/^(0|false|no|off)$/i.test(env.CLAUDE_CODE_ENABLE_CFC ?? '')) return false;
   let config: { claudeInChromeDefaultEnabled?: boolean; cachedChromeExtensionInstalled?: boolean; chromeExtension?: { pairedDeviceId?: string } };
   try {
-    config = JSON.parse(readFileSync(join(env.CLAUDE_CONFIG_DIR || home, '.claude.json'), 'utf8'));
+    config = JSON.parse(readFileSync(claudeStateFile(ownerSetup('claude', env, home)), 'utf8'));
   } catch {
     return false;
   }
@@ -87,10 +89,13 @@ export const sdkRuntime: AgentRuntime = {
   start(spec, firstMessage, images) {
     const inbox = new Inbox();
     const there = remote(spec.cwd);
+    if (!there && spec.setup) ensureSetup(spec.setup);
+    const supplied = { ...cleanEnv(), ...spec.env };
+    const env = there ? { ...spec.env } : spec.setup ? setupEnv('claude', spec.setup, supplied) : supplied;
     // a session on another machine: whether its connection was lost, rather than the session failing
     let lost = false;
     // not on this machine's account: on another machine, or here on CLAUDE_CODE_OAUTH_TOKEN
-    const token = there || ({ ...cleanEnv(), ...spec.env }).CLAUDE_CODE_OAUTH_TOKEN ? { token: true as const } : {};
+    const token = there || env.CLAUDE_CODE_OAUTH_TOKEN ? { token: true as const } : {};
     const files = there ? sessionFiles(there.host.o.home, spec.plugins ?? []) : undefined;
     if (there && files) {
       const dir = there.host.prepare(files);
@@ -137,13 +142,13 @@ export const sdkRuntime: AgentRuntime = {
         // without the repository's settings, which Claude Code reads with its CLAUDE.md
         ...(spec.untrusted ? { settingSources: ['user' as const] } : {}),
         // the owner's own Chrome, signed in; a session elsewhere or reading only has no use for it
-        ...(!there && !spec.readOnly && chromeAvailable() ? { extraArgs: { chrome: null } } : {}),
+        ...(!there && !spec.readOnly && chromeAvailable(env) ? { extraArgs: { chrome: null } } : {}),
         ...(spec.resume ? { resume: spec.resume } : {}),
         ...(spec.dirs?.length ? { additionalDirectories: spec.dirs } : {}),
         ...(spec.effort ? { effort: spec.effort } : {}),
         ...(spec.model ? { model: spec.model } : {}),
         // on another machine only what the session itself needs: that machine has its own PATH and home
-        env: there ? { ...spec.env } : { ...cleanEnv(), ...spec.env },
+        env,
         ...(spec.askOwner ? { canUseTool: (name: string, input: Record<string, unknown>, o: { signal: AbortSignal; decisionReason?: string }) => askOwner(spec.askOwner!, name, input, o) } : {}),
         hooks: {
           PreToolUse: [
@@ -278,7 +283,7 @@ export function spawnHere(stderr: (text: string) => void): (o: SpawnOptions) => 
  * session on a host, started over its connection. What it says unasked is not needed. It runs until
  * `close`.
  */
-export function idleClaude(cwd: string, options: Options = {}, there?: SshHost): { q: Query; close: () => void } {
+export function idleClaude(cwd: string, options: Options = {}, there?: SshHost, env = process.env): { q: Query; close: () => void } {
   const abort = new AbortController();
   const prompt = (async function* () {
     await new Promise((resolve) => abort.signal.addEventListener('abort', resolve, { once: true }));
@@ -291,7 +296,7 @@ export function idleClaude(cwd: string, options: Options = {}, there?: SshHost):
       cwd,
       abortController: abort,
       // on another machine only what the session itself needs: that machine has its own PATH and home
-      env: there ? {} : cleanEnv(),
+      env: there ? {} : cleanEnv(env),
       ...(claude ? { pathToClaudeCodeExecutable: claude } : {}),
       spawnClaudeCodeProcess: there ? there.session({}) : spawnHere(() => {}),
     },

@@ -8,7 +8,7 @@ import { finished, openQuestions, parseQuestion, pausableNow, started, taskAutho
 import { mockPage } from '../core/frame';
 import { mmss } from '../../plugin/skills/demo/lib/timeline.ts';
 import { answerText, toggle } from './answer';
-import { api, type Field, onCardEvent, onCardEventGone, onReconnect } from './api';
+import { api, canvasOf, type Field, onCardEvent, onCardEventGone, onReconnect } from './api';
 import type { Act, Tell } from './cardSheet';
 import { PlayMark, StopMark } from './parts';
 import { holdsNotes } from '../core/queue';
@@ -321,8 +321,7 @@ function Line({
   ) : turn.line ? (
     <div className={`note ev-${turn.e.kind}`} title={turn.e.code ? turn.e.text : undefined}>
       {time(turn.e.at)} · <Linked text={eventText(turn.e)} />
-      {turn.e.kind === 'error' && !explained && claudeLoginFailed(turn.e.text) && <Reauthenticate token={turn.e.token} />}
-      {turn.e.kind === 'error' && !explained && codexLoginLost(turn.e.text) && <CodexLogin host={codexLoginLost(turn.e.text)!.host} />}
+      {turn.e.kind === 'error' && !explained && <ErrorLogin event={turn.e} />}
     </div>
   ) : (
     <Message turn={turn} {...rest} />
@@ -856,6 +855,14 @@ const explainedFailure = (item: Item, events: CardEvent[] | null | undefined) =>
   return last?.kind === 'error' ? last : undefined;
 };
 
+function ErrorLogin({ event, start }: { event: CardEvent; start?: boolean }) {
+  const error = { canvas: canvasOf(event.cardId), card: event.cardId, event: event.id };
+  const codex = codexLoginLost(event.text);
+  if (codex) return <CodexLogin start={start} host={codex.host} error={error} />;
+  if (claudeLoginFailed(event.text)) return <Reauthenticate start={start} token={event.token} error={error} />;
+  return null;
+}
+
 /**
  * Why a planned card is not running: a start through the Coordinator that failed afterwards drops
  * the card back to planned, and the reason is the last entry of its log.
@@ -868,8 +875,7 @@ export function LastFailure({ item }: { item: Item }) {
       <h4>{t.lastFailure(time(last.at))}</h4>
       <div className="q-text" title={last.code ? last.text : undefined}>
         {eventText(last)}
-        {claudeLoginFailed(last.text) && <Reauthenticate start token={last.token} />}
-        {codexLoginLost(last.text) && <CodexLogin start host={codexLoginLost(last.text)!.host} />}
+        <ErrorLogin start event={last} />
       </div>
     </div>
   );

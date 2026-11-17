@@ -39,6 +39,9 @@ import { parseTagLines, tagLines } from '../core/page-tags';
 import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/settings.ts';
 import type { UsageMeters } from './usage';
 import type { Harnesses } from './harnesses';
+import { HARNESSES, type Harness, type HarnessSetup } from '../core/agents';
+import { claudeLoginFailed, codexLoginLost } from '../core/login';
+import { ownerSetup, type HarnessSetups } from './harness-setup';
 import { VERSION } from './resources';
 import { footerOf } from './wish';
 import { serving } from './owner';
@@ -151,6 +154,7 @@ export interface ServeDeps {
   stalls?: Stalls;
   /** Claude Code and Codex on this machine, for the Configuration's harnesses and models. */
   harnesses?: Harnesses;
+  harnessSetups?: HarnessSetups;
   /** Hears of every request from Obeya's own site: a scratch Obeya is in use (scratch.ts). */
   used?: () => void;
 }
@@ -381,7 +385,18 @@ function appRoutes(x: Routing) {
 
 /** The owner's own settings (settings.ts), read and saved in Obeya's home. */
 function ownerSettingsRoutes(x: Routing) {
-  const { pages, config, harnesses, usage } = x;
+  const { pages, config, harnesses, harnessSetups, usage, here } = x;
+  const view = async (home: string) => {
+    const listed = (await harnesses?.view()) ?? [];
+    const agents = agentsView(home, listed, harnesses?.preferred());
+    if (!harnessSetups) return agents;
+    const [claude, codex] = await Promise.all([harnessSetups.view('claude'), harnessSetups.view('codex')]);
+    return { ...agents, setups: { claude, codex } };
+  };
+  const agentSkillsChanged = () => {
+    for (const canvas of x.canvases.all()) canvas.agentSkillsChanged();
+    pages.everyone({ type: 'agentSkillsChanged' });
+  };
   return area({
     // the interface language (chosen in the settings, else the system's) and the conversation language (chosen, else the interface's)
     '/api/language': {
@@ -413,9 +428,11 @@ function ownerSettingsRoutes(x: Routing) {
     },
     // the harness, model and effort of each group of agents, read whenever one starts
     '/api/agents': {
-      GET: needs(config, async (c) => agentsView(c.home, (await harnesses?.view()) ?? [], harnesses?.preferred())),
+      GET: needs(config, (c) => view(c.home)),
       PUT: needs(config, async (c, req) => {
-        return saveAgents(c.home, await req.json(), (await harnesses?.view()) ?? [], harnesses?.preferred());
+        saveAgents(c.home, await req.json());
+        agentSkillsChanged();
+        return view(c.home);
       }),
     },
     // a harness (`{ harness }`, Claude Code where none is named) brought up to date in the background, here or on the host named (`{ host }`), at the owner's click; the view says how far it got
@@ -423,8 +440,39 @@ function ownerSettingsRoutes(x: Routing) {
       POST: needs(config, async (c, req) => {
         const { harness, host } = await someFields(req);
         harnesses?.update(harness === 'codex' ? 'codex' : 'claude', typeof host === 'string' ? host : undefined);
-        return agentsView(c.home, (await harnesses?.view()) ?? [], harnesses?.preferred());
+        return view(c.home);
       }),
+    },
+    '/api/agents/setup': {
+      PUT: here(needs(config, async (c, req) => {
+        const body = await fields(req);
+        const harness = givenHarness(body.harness);
+        const setups = x.harnessSetups;
+        if (!setups) throw new BadRequest('invalid', 'no local agent setups');
+        const before = setups.at(harness);
+        await setups.save(harness, body);
+        const after = setups.at(harness);
+        if (before.mode !== after.mode || before.folder !== after.folder) {
+          try {
+            await harnesses?.setupChanged(harness);
+          } finally {
+            agentSkillsChanged();
+          }
+        }
+        return view(c.home);
+      })),
+      POST: here(needs(config, async (c, req) => {
+        const { harness: given, action, folder } = await fields(req);
+        const harness = givenHarness(given);
+        if (action === 'copy' && x.harnessSetups) await x.harnessSetups.copy(harness, folder);
+        else if (action !== 'refresh') throw new BadRequest('invalid', 'unknown setup action');
+        try {
+          await harnesses?.setupChanged(harness);
+        } finally {
+          agentSkillsChanged();
+        }
+        return view(c.home);
+      })),
     },
   });
 }
@@ -498,6 +546,24 @@ function siteRoutes(x: Routing) {
   });
 }
 
+function givenHarness(value: unknown): Harness {
+  const harness = HARNESSES.find((h) => h === value);
+  if (!harness) throw new BadRequest('invalid', 'choose a harness');
+  return harness;
+}
+
+/** A card sign-in targets the error's actual local setup, even if Configuration has moved on. */
+function errorSetup(x: Routing, harness: Harness, ref: unknown): HarnessSetup | undefined {
+  if (ref === undefined) return undefined;
+  const { canvas, card, event } = (ref ?? {}) as { canvas?: unknown; card?: unknown; event?: unknown };
+  if (typeof canvas !== 'string' || typeof card !== 'string' || typeof event !== 'number')
+    throw new BadRequest('invalid', 'name a card login error');
+  const found = x.pages.canvas(canvas)?.board.event(card, event);
+  if (found?.kind !== 'error' || !(harness === 'claude' ? claudeLoginFailed(found.text) : codexLoginLost(found.text)))
+    throw new BadRequest('invalid', 'no such card login error');
+  return found.setup ?? ownerSetup(harness);
+}
+
 /** What this machine needs: voice in, and the setup assistant. */
 function setupRoutes(x: Routing) {
   const { access, voiceSetup: setup, machine, here } = x;
@@ -516,11 +582,21 @@ function setupRoutes(x: Routing) {
     // the setup assistant: what Obeya needs on this machine, installed, logged in; then the first canvas
     '/api/setup': { GET: needs(machine, (m) => m.view()) },
     '/api/setup/install': { POST: needs(machine, async (m, req) => m.install(await req.json())) },
-    '/api/setup/login': { POST: needs(machine, async (m, req) => m.login(await req.json())) },
-    '/api/setup/token': { POST: needs(machine, async (m, req) => m.saveToken(await req.json())) },
+    '/api/setup/login': { POST: needs(machine, async (m, req) => {
+      const body = await fields(req);
+      const target = body.id === 'claudeLogin' ? errorSetup(x, 'claude', body.error) : undefined;
+      return m.login(body, target);
+    }) },
+    '/api/setup/token': { POST: needs(machine, async (m, req) => {
+      const body = await fields(req);
+      return m.saveToken(body, errorSetup(x, 'claude', body.error));
+    }) },
     // a login to Codex for a card whose session lost it, here or on a host: started, then followed
     '/api/setup/codex-login': {
-      POST: needs(machine, async (m, req) => m.codexLogin(await req.json())),
+      POST: needs(machine, async (m, req) => {
+        const body = await fields(req);
+        return m.codexLogin(body, body.host ? undefined : errorSetup(x, 'codex', body.error));
+      }),
       GET: needs(machine, (m, req) => m.codexLoginState(new URL(req.url).searchParams.get('id') ?? '')),
     },
     '/api/setup/identity': { POST: needs(machine, async (m, req) => m.identity(await req.json())) },

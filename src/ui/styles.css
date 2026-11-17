@@ -1819,6 +1819,27 @@ button.q-end:hover { color: var(--ink); text-decoration: underline; }
 .cfg-agent-no-speed { text-align: center; }
 .cfg-agent { display: flex; flex-direction: column; padding: 9px 0; font-size: 14px; }
 .cfg-agent > .hint { font-size: 12px; }
+.cfg-agent-setup { margin: 28px 0 20px; padding-top: 18px; max-width: 980px; border-top: 1px solid var(--line); }
+.cfg-agent-setup h3, .cfg-agent-setup h4 { margin: 0; }
+.cfg-agent-setup h4 { font-size: 14px; }
+.cfg-agent-setup p { margin: 0; }
+.cfg-agent-setup > .hint { margin: 4px 0 14px; }
+.cfg-agent-setups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.cfg-agent-setup-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.cfg-agent-setup-modes { margin: 0; align-self: flex-start; }
+.cfg-agent-setup-modes button:disabled { opacity: .55; cursor: default; }
+.cfg-agent-setup-login { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.cfg-agent-setup-folder > label { display: block; margin-bottom: 4px; }
+.cfg-agent-setup-folder input { flex: 1; min-width: 0; }
+.cfg-agent-setup-login .reauthenticate { margin: 0; max-width: 100%; }
+.cfg-agent-setup-login details { flex-basis: 100%; min-width: 0; }
+.cfg-agent-setup-login summary { cursor: pointer; }
+.cfg-agent-setup-login .setup-signed-in { color: var(--approved); font-size: 13px; }
+.cfg-agent-setup-copy, .cfg-agent-setup-alias { display: grid; justify-items: start; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; min-width: 0; }
+.cfg-agent-setup-alias code { box-sizing: border-box; max-width: 100%; padding: 7px 9px; border-radius: 5px; background: var(--chip); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 680px) {
+  .cfg-agent-setups { grid-template-columns: 1fr; }
+}
 @media (max-width: 1200px) {
   .cfg-agents { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .cfg-agent { grid-column: 1 / -1; padding-bottom: 2px; }

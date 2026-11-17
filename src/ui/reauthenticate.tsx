@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { LoginEvent } from '../core/agents';
 import { api, failText } from './api';
 import { useAsked } from './asked';
 import { phoneView } from './phone';
@@ -15,18 +16,25 @@ const onThisMachine = () => (local ??= api.access().then((v) => v.local, () => t
  * The terminal opens on the machine Obeya runs on, so the phone view and another device get no
  * button, only where to go.
  */
-export function Reauthenticate({ start = false, token = false }: { start?: boolean; token?: boolean }) {
+export function Reauthenticate({ start = false, token = false, error, folder, onLogin }: {
+  start?: boolean;
+  token?: boolean;
+  error?: LoginEvent;
+  folder?: string;
+  onLogin?: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [command, setCommand] = useState('');
   const [pasted, setPasted] = useState('');
+  const settings = folder !== undefined;
   const [saved, setSaved] = useState(false);
   const here = useAsked(!phoneView() && onThisMachine, !phoneView());
   const login = async () => {
     setBusy(true);
     setStatus('');
     try {
-      const { opened, command } = await api.setupLogin('needed', 'claudeLogin', token);
+      const { opened, command } = await api.setupLogin('needed', 'claudeLogin', token, error, folder);
       setCommand(command);
       setStatus(opened ? t.setup.terminalOpen : t.setup.noTerminal);
     } catch (e) {
@@ -38,9 +46,10 @@ export function Reauthenticate({ start = false, token = false }: { start?: boole
   const save = async () => {
     setBusy(true);
     try {
-      await api.setupToken(pasted.trim());
+      await api.setupToken(pasted.trim(), error, folder);
       setPasted('');
       setSaved(true);
+      onLogin?.();
       setStatus('');
     } catch (e) {
       setStatus(failText(e));
@@ -49,14 +58,14 @@ export function Reauthenticate({ start = false, token = false }: { start?: boole
     }
   };
   if (!here) return <div className="reauthenticate"><div className="hint">{t.setup.atComputer(token)}</div></div>;
-  if (saved) return <div className="reauthenticate"><div className="hint" role="status">{t.setup.tokenSaved(start)}</div></div>;
+  if (saved) return <div className="reauthenticate"><div className="hint" role="status">{settings ? t.config.agents.setup.loggedIn : t.setup.tokenSaved(start)}</div></div>;
   return (
     <div className="reauthenticate">
       {token && <div className="hint">{t.setup.tokenWhy}</div>}
-      <button className="btn small" disabled={busy} onClick={() => void login()}>{token ? t.setup.newToken : t.setup.reauthenticate}</button>
+      <button className="btn small" disabled={busy} onClick={() => void login()}>{token ? t.setup.newToken : settings ? t.setup.login : t.setup.reauthenticate}</button>
       {status && <span className="hint" role="status">{status}</span>}
-      {command && <div className="hint"><code>{command}</code></div>}
-      {command && !token && <div className="hint">{start ? t.setup.startAfterReauthenticate : t.setup.afterReauthenticate}</div>}
+      {command && (!settings || status === t.setup.noTerminal) && <div className="hint"><code>{command}</code></div>}
+      {command && !settings && !token && <div className="hint">{start ? t.setup.startAfterReauthenticate : t.setup.afterReauthenticate}</div>}
       {command && token && (
         <form className="reauthenticate-token" onSubmit={(e) => (e.preventDefault(), void save())}>
           <label className="hint" htmlFor="reauthenticate-token">{t.setup.pasteToken}</label>
@@ -76,7 +85,13 @@ export function Reauthenticate({ start = false, token = false }: { start?: boole
  * sign-in returns to the machine Obeya runs on, so the phone view and another device get no
  * button, only where to go.
  */
-export function CodexLogin({ host, start = false }: { host: string | null; start?: boolean }) {
+export function CodexLogin({ host, start = false, error, folder, onLogin }: {
+  host: string | null;
+  start?: boolean;
+  error?: LoginEvent;
+  folder?: string;
+  onLogin?: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [page, setPage] = useState('');
@@ -91,7 +106,11 @@ export function CodexLogin({ host, start = false }: { host: string | null; start
       try {
         const s = await api.codexLoginState(following);
         if (!live) return;
-        if (s.state === 'done') return setDone(true);
+        if (s.state === 'done') {
+          setDone(true);
+          onLogin?.();
+          return;
+        }
         if (s.state === 'failed') {
           setFollowing('');
           setPage('');
@@ -109,7 +128,7 @@ export function CodexLogin({ host, start = false }: { host: string | null; start
     // opened in the click, which the browser allows, and pointed at the page once Codex names it
     const tab = window.open('', '_blank');
     try {
-      const { id, url } = await api.codexLogin(host);
+      const { id, url } = await api.codexLogin(host, error, folder);
       if (tab) tab.location.href = url;
       setPage(url);
       setFollowing(id);
@@ -121,7 +140,7 @@ export function CodexLogin({ host, start = false }: { host: string | null; start
     }
   };
   if (!here) return <div className="reauthenticate"><div className="hint">{t.setup.codexAtComputer}</div></div>;
-  if (done) return <div className="reauthenticate"><div className="hint" role="status">{t.setup.codexLoggedIn(start)}</div></div>;
+  if (done) return <div className="reauthenticate"><div className="hint" role="status">{onLogin ? t.config.agents.setup.loggedIn : t.setup.codexLoggedIn(start)}</div></div>;
   return (
     <div className="reauthenticate">
       <button className="btn small" disabled={busy} onClick={() => void login()}>{t.setup.codexLogin}</button>

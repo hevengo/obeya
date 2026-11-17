@@ -23,6 +23,8 @@ import { expandHome, readDemoSettings } from '../../plugin/skills/demo/lib/setti
 import { checkSetup, type LinuxFamily, linuxFamily, output } from '../../plugin/skills/demo/lib/setup.ts';
 import { installVoice } from '../../plugin/skills/demo/lib/voices.ts';
 import { BadRequest } from './board';
+import type { Harness, HarnessSetup } from '../core/agents';
+import { type HarnessSetups, ensureSetup, saveSetupToken, setupEnv, setupLoginCommand } from './harness-setup';
 import type { CanvasRuntime } from './canvas';
 import type { Config } from './config';
 import { previewGitSetup, setUpGit, withoutGit } from './git-setup';
@@ -31,7 +33,7 @@ import { parseRemote, repoInfo } from './repo';
 import { COMPILED } from './resources';
 import { claudeExecutable, machineClaude, runClaudeHere } from './claude';
 import { codexExecutable, CodexLogins, type CodexLoginState, runCodex, spawnOptions, startArgv } from './codex';
-import { findCodex, type HarnessFound, type Harnesses } from './harnesses';
+import { claudeChannel, findCodex, type HarnessFound, type Harnesses } from './harnesses';
 import { extendPath, freshPath, which } from './path';
 import { ownerLanguage } from './settings';
 import type { VoiceSetup } from './voice-setup';
@@ -241,8 +243,7 @@ export function openWithSystem(path: string, file = false, show = false): Promis
 }
 
 /** Opens a terminal that runs `argv`; false where Obeya finds none to open (Linux without one it knows). */
-export async function openTerminal(argv: string[], platform: string = process.platform, env: Env = process.env): Promise<boolean> {
-  const line = shown(argv);
+export async function openTerminal(argv: string[], platform: string = process.platform, env: Env = process.env, line = shown(argv)): Promise<boolean> {
   if (platform === 'darwin') {
     const script = line.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
     return (await output('osascript', ['-e', 'tell application "Terminal"', '-e', 'activate', '-e', `do script "${script}"`, '-e', 'end tell'], env)) !== null;
@@ -326,6 +327,7 @@ export interface MachineOptions {
   compiled?: boolean;
   /** Told what each check finds of the harnesses. */
   harnesses?: Harnesses;
+  harnessSetups?: HarnessSetups;
   /** Looks at Codex; tests give their own. */
   findCodex?: (env: Env) => Promise<HarnessFound | null>;
 }
@@ -348,6 +350,14 @@ export class MachineSetup {
   private get env() {
     return this.o.env ?? process.env;
   }
+  /** A Configuration sign-in must still be on the folder the dialog showed. */
+  private localSetup(harness: Harness, expected: unknown): HarnessSetup | undefined {
+    const setup = this.o.harnessSetups?.at(harness);
+    if (expected !== undefined && (setup?.mode !== 'separate' || setup.folder !== expected))
+      throw new BadRequest('invalid', 'the agent setup changed while the dialog was open');
+    return setup;
+  }
+
   private get platform() {
     return this.o.platform ?? process.platform;
   }
@@ -383,8 +393,15 @@ export class MachineSetup {
     const logins: Found['logins'] = {};
 
     const agentsPart = async (): Promise<MachineItem[]> => {
-      const [claude, codex] = await Promise.all([findClaude(env, this.o.compiled ?? COMPILED, platform, arch), (this.o.findCodex ?? findCodex)(env)]);
-      this.o.harnesses?.set({ claude: claude.version ? { version: claude.version, loggedIn: claude.loggedIn } : null, codex });
+      const stamp = this.o.harnesses?.stamp();
+      const claudeEnv = this.o.harnessSetups?.env('claude') ?? env;
+      const codexEnv = this.o.harnessSetups?.env('codex') ?? env;
+      const [claude, codex, channel] = await Promise.all([
+        findClaude(claudeEnv, this.o.compiled ?? COMPILED, platform, arch),
+        (this.o.findCodex ?? findCodex)(codexEnv),
+        this.o.harnessSetups ? claudeChannel(claudeEnv) : undefined,
+      ]);
+      this.o.harnesses?.set({ claude: claude.version ? { version: claude.version, loggedIn: claude.loggedIn, channel } : null, codex }, stamp);
       const claudeItems: MachineItem[] = [];
       if (claude.sdk) claudeItems.push({ id: 'claude', state: 'ok', found: `${CHECKED_CLAUDE} (Agent SDK)` });
       else claudeItems.push(claude.version ? { id: 'claude', state: 'ok', found: claude.version } : missing({ id: 'claude', install: hint('claude') }));
@@ -526,8 +543,19 @@ export class MachineSetup {
    * run by hand. `token`: Claude's login for the sessions that run on a token, `claude setup-token`,
    * whose token the owner then gives Obeya (`saveToken`).
    */
-  async login(input: unknown): Promise<{ opened: boolean; command: string }> {
-    const { section, id, token } = (input ?? {}) as { section?: MachineSectionId; id?: MachineItem['id']; token?: boolean };
+  async login(input: unknown, target?: HarnessSetup): Promise<{ opened: boolean; command: string }> {
+    const { section, id, token, folder } = (input ?? {}) as { section?: MachineSectionId; id?: MachineItem['id']; token?: boolean; folder?: unknown };
+    const harness = id === 'claudeLogin' ? 'claude' : id === 'codexLogin' ? 'codex' : null;
+    const setup = target ?? (harness ? this.localSetup(harness, folder) : undefined);
+    if (harness && setup && section === 'needed') {
+      ensureSetup(setup);
+      const env = setupEnv(harness, setup, this.env, false);
+      const bin = harness === 'claude' ? (await findClaude(env, this.o.compiled ?? COMPILED, this.platform, this.o.arch ?? process.arch)).bin : codexExecutable(env);
+      if (!bin || (token && harness !== 'claude')) throw new BadRequest('invalid', `${id} needs no login`);
+      const argv = token ? [bin, 'setup-token'] : harness === 'claude' ? [bin, 'auth', 'login'] : [bin, 'login'];
+      const command = setupLoginCommand(harness, setup, argv, this.platform);
+      return { opened: await openTerminal(argv, this.platform, env, command), command };
+    }
     const { item, found } = await this.item(section!, id!);
     const login = found.logins[item.id];
     if (!login || (item.act !== 'login' && item.id !== 'claudeLogin')) throw new BadRequest('invalid', `${id} needs no login`);
@@ -540,8 +568,8 @@ export class MachineSetup {
    * Starts a login to Codex where a card's session lost it: on this machine, or on the host named
    * (`host`); the page of ChatGPT's sign-in for the owner's browser, and the id to follow it by.
    */
-  async codexLogin(input: unknown): Promise<{ id: string; url: string }> {
-    const { host } = (input ?? {}) as { host?: unknown };
+  async codexLogin(input: unknown, target?: HarnessSetup): Promise<{ id: string; url: string }> {
+    const { host, folder } = (input ?? {}) as { host?: unknown; folder?: unknown };
     let there: SshHost | null = null;
     if (host !== undefined && host !== null) {
       if (typeof host !== 'string' || !/^[\w.-]+$/.test(host)) throw new BadRequest('invalid', 'not a host');
@@ -551,7 +579,13 @@ export class MachineSetup {
         throw new BadRequest('invalid', `no host ${host}`);
       }
     }
-    return (this.codexLogins ??= new CodexLogins(this.env)).start(there);
+    const setup = there ? undefined : target ?? this.localSetup('codex', folder);
+    if (setup) ensureSetup(setup);
+    return (this.codexLogins ??= new CodexLogins(this.env)).start(
+      there,
+      setup ? setupEnv('codex', setup, this.env) : this.env,
+      there ? undefined : () => this.refreshHarnesses(),
+    );
   }
 
   /** Where a login to Codex stands (`codexLogin`). */
@@ -560,12 +594,19 @@ export class MachineSetup {
   }
 
   /** The token the owner got from `claude setup-token`, for the sessions that run on a token. */
-  saveToken(input: unknown): { saved: true } {
-    const { token } = (input ?? {}) as { token?: unknown };
+  async saveToken(input: unknown, target?: HarnessSetup): Promise<{ saved: true }> {
+    const { token, folder } = (input ?? {}) as { token?: unknown; folder?: unknown };
     const value = typeof token === 'string' ? token.trim() : '';
     if (!value || /\s/.test(value)) throw new BadRequest('invalid', 'not a token');
-    saveClaudeToken(this.o.home, value, this.env);
+    const setup = target ?? this.localSetup('claude', folder);
+    if (setup?.mode === 'separate') await saveSetupToken(setup, value);
+    else saveClaudeToken(this.o.home, value, this.env);
+    this.refreshHarnesses();
     return { saved: true };
+  }
+
+  private refreshHarnesses() {
+    this.o.harnesses?.refresh().catch((e) => console.warn(`Obeya: could not check the harnesses: ${e}`));
   }
 
   /** git's name and e-mail for commits, as the owner gives them. */

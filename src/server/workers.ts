@@ -2976,7 +2976,7 @@ export class Workers {
         // a failure that is no wait ends the one before: the worker does not go on by itself
         if (live.limited !== undefined) this.unlimited(cardId, live);
         live.failed = e.message;
-        this.o.board.log(cardId, 'error', 'obeya', e.message, { token: e.token });
+        this.o.board.log(cardId, 'error', 'obeya', e.message, { token: e.token, setup: e.setup });
         break;
       case 'lost':
         this.lost(cardId, live);

@@ -5,12 +5,12 @@
 // read is left out, and a transcript that cannot be read at all gives no excerpt rather than an error.
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { clip } from '../core/text';
 import { bareArgv, fileCall, mcpTool } from './codex';
 import type { ToolCall } from './folder';
 import { CODEX_SESSION } from './runtime';
+import { ownerSetup } from './harness-setup';
 
 /** One tool call of the run, with what came of it and the agent's words around it. */
 export interface Call {
@@ -44,16 +44,16 @@ export interface Excerpt {
 }
 
 /** The directory holding the SDK's transcripts, one subdirectory per working directory. */
-export function transcriptsDir(): string {
-  return join(process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), '.claude'), 'projects');
+export function transcriptsDir(folder = ownerSetup('claude').folder): string {
+  return join(folder, 'projects');
 }
 
 /**
  * The transcript file of a session, or null. It is looked for under the working directory it ran
  * in first (`cwd`, as the SDK names its directory), then in every directory, as the naming may change.
  */
-export function findTranscript(sessionId: string, cwd?: string | null, dir = transcriptsDir()): string | null {
-  if (sessionId.startsWith(CODEX_SESSION)) return findThread(sessionId.slice(CODEX_SESSION.length));
+export function findTranscript(sessionId: string, cwd?: string | null, dir = transcriptsDir(), threads?: string[]): string | null {
+  if (sessionId.startsWith(CODEX_SESSION)) return findThread(sessionId.slice(CODEX_SESSION.length), threads);
   if (!/^[\w-]+$/.test(sessionId)) return null;
   const name = `${sessionId}.jsonl`;
   if (cwd) {
@@ -70,9 +70,8 @@ export function findTranscript(sessionId: string, cwd?: string | null, dir = tra
 }
 
 /** The directories holding Codex's threads: those of the last days by date, then those archived. */
-export function threadsDirs(): string[] {
-  const home = process.env.CODEX_HOME ?? join(homedir(), '.codex');
-  return [join(home, 'sessions'), join(home, 'archived_sessions')];
+export function threadsDirs(folder = ownerSetup('codex').folder): string[] {
+  return [join(folder, 'sessions'), join(folder, 'archived_sessions')];
 }
 
 /**

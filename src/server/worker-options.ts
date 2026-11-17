@@ -14,9 +14,12 @@ import type { StoredDemo } from './row';
 import type { AgentRuntime } from './runtime';
 import type { CardWorkspaces, Landed, Workspaces } from './workspaces';
 
+import type { HarnessSetups } from './harness-setup';
+
 export interface WorkerOptions {
   board: Board;
   runtime: AgentRuntime;
+  harnessSetups?: HarnessSetups;
   workspaces: CardWorkspaces;
   adapter: RepoAdapter;
   /**

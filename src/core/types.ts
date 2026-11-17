@@ -1,3 +1,4 @@
+import type { HarnessSetup } from './agents';
 // Shapes shared by the server and the UI. What is asked of them lives beside them in modules of its
 // own: a card's predicates in `card.ts`, the agents' in `agents.ts`, the configuration's in `config.ts`.
 
@@ -910,6 +911,8 @@ export interface CardEvent {
    * this machine's account: signing in again here does not renew it, a new token does.
    */
   token?: true;
+  /** The local setup of the session whose login failed. */
+  setup?: HarnessSetup;
 }
 
 /** A place in a card's demo video the owner's words are about, as the worker reads it with them. */
@@ -2275,6 +2278,7 @@ export type ServerMessage =
   | { type: 'usage'; usage: Usage | null }
   /** On connect and whenever the owner changes it: whether the page shows what the agents cost (`CostsView`). */
   | { type: 'costs'; shown: boolean }
+  | { type: 'agentSkillsChanged' }
   /** On connect and whenever it changes: what waits for the owner on each canvas, by canvas id. */
   | { type: 'waiting'; waiting: Record<string, Waiting> }
   /** Whenever a canvas starts, stops, or changes its name or repositories while Obeya runs. */

@@ -12,7 +12,7 @@ import { filesIn } from './files';
 import { OWN_GROUP } from './spawn';
 import type { Messages } from '../core/messages';
 import type { ToolWatch } from './folder';
-import { agentDefault, type AgentSpeed, type AgentEffort, type AgentRole, type AgentSetting, type CardAgent, type Harness, storedModel } from '../core/agents';
+import { agentDefault, type AgentSpeed, type AgentEffort, type AgentRole, type AgentSetting, type CardAgent, type Harness, type HarnessSetup, storedModel } from '../core/agents';
 import { messageOf } from '../core/text';
 import { claudeLoginFailed, codexLoginLost } from '../core/login';
 
@@ -65,7 +65,7 @@ export type AgentEvent =
    * tried again at `resetsAt` (`outageRetry`), and the turn waits as for the usage limit. `token`
    * when the session signed in with a token rather than this machine's account (`CardEvent.token`).
    */
-  | { type: 'error'; message: string; limit?: TurnLimit; token?: true };
+  | { type: 'error'; message: string; limit?: TurnLimit; token?: true; setup?: HarnessSetup };
 
 /**
  * What keeps a turn from going on until `resetsAt` (milliseconds, where known): the account's usage
@@ -101,6 +101,8 @@ export interface AgentSpec {
   tools: AgentTool[];
   /** Resume this session instead of starting one. */
   resume?: string;
+  /** The setup selected for this local session. */
+  setup?: HarnessSetup;
   /** Directories outside `cwd` the agent works in as in its own (a looked-up thread's output directory). */
   dirs?: string[];
   /** Read-only agents get no tools that change files or run commands. */

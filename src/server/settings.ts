@@ -23,6 +23,8 @@ interface Settings {
   theme?: Theme;
   /** Only what differs from `AGENT_DEFAULTS`, so a changed default reaches what the owner left. */
   agents?: Partial<Record<AgentRole, Chosen>>;
+  /** A folder of their own for the agents on this machine, per harness. */
+  harnessSetups?: Partial<Record<Harness, { separate: boolean; folder: string }>>;
   /** How other devices reach Obeya; absent, they do not. */
   remote?: RemoteSetting;
   /** The on/off choices (`SWITCHES`), each only where it differs from its default. */
@@ -218,4 +220,14 @@ export function saveRemote(home: string, input: unknown): RemoteSetting | null {
   if (given !== null && !remote) throw new BadRequest('invalid', 'remote must be null, { via: "tailscale" } or { via: "address", address }, each with an optional awake: "always"');
   save(home, 'remote', remote, `other devices ${remote ? `reach it ${remote.via === 'tailscale' ? 'through Tailscale' : `at ${remote.address}`}` : 'do not reach it'},`);
   return remote;
+}
+
+export function harnessSetupChoice(home: string, harness: Harness): { separate: boolean; folder: string } | undefined {
+  const choice = read(home).harnessSetups?.[harness];
+  return choice && typeof choice.folder === 'string' && typeof choice.separate === 'boolean' ? choice : undefined;
+}
+
+export function saveHarnessSetupChoice(home: string, harness: Harness, choice: { separate: boolean; folder: string }) {
+  const settings = read(home);
+  write(home, { ...settings, harnessSetups: { ...settings.harnessSetups, [harness]: choice } });
 }

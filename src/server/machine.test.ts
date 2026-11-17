@@ -70,9 +70,9 @@ describe('what Obeya needs on this machine', () => {
     const machine = new MachineSetup({ home, config: config(), env, platform: 'linux', arch: 'x64', compiled: true });
     expect(await machine.login({ section: 'needed', id: 'claudeLogin', token: true })).toEqual({ opened: false, command: `${claude} setup-token` });
     await expect(machine.login({ section: 'needed', id: 'gh', token: true })).rejects.toThrow();
-    expect(() => machine.saveToken({ token: 'two words' })).toThrow();
-    expect(() => machine.saveToken({ token: ' ' })).toThrow();
-    expect(machine.saveToken({ token: ' sk-ant-oat01-new\n' })).toEqual({ saved: true });
+    await expect(machine.saveToken({ token: 'two words' })).rejects.toThrow();
+    await expect(machine.saveToken({ token: ' ' })).rejects.toThrow();
+    expect(await machine.saveToken({ token: ' sk-ant-oat01-new\n' })).toEqual({ saved: true });
     expect(readFileSync(join(home, 'claude-token'), 'utf8')).toBe('sk-ant-oat01-new\n');
     // Windows has no such modes: a file in the user's profile is the user's
     if (process.platform !== 'win32') expect(statSync(join(home, 'claude-token')).mode & 0o777).toBe(0o600);
@@ -81,9 +81,9 @@ describe('what Obeya needs on this machine', () => {
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('sk-ant-oat01-new');
   });
 
-  test('a token kept for the hosts leaves a machine on its own login on that login', () => {
+  test('a token kept for the hosts leaves a machine on its own login on that login', async () => {
     const env: Record<string, string> = { PATH: bin };
-    new MachineSetup({ home, config: config(), env, platform: 'linux', arch: 'x64' }).saveToken({ token: 'sk-ant-oat01-new' });
+    await new MachineSetup({ home, config: config(), env, platform: 'linux', arch: 'x64' }).saveToken({ token: 'sk-ant-oat01-new' });
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
   });
 

@@ -68,6 +68,7 @@ const ALLOWED: Record<string, { why: string; calls: Record<string, number> }> = 
     why: "server path, rare: setting up git in a folder the owner chose (setup, a card's new repository) runs git init, add and commit with the server waiting; a candidate for spawnOutput",
     calls: { existsSync: 2, mkdtempSync: 1, rmSync: 3, spawnSync: 1, statSync: 2, writeFileSync: 2 },
   },
+  'harness-setup.ts': { why: 'server path, cheap: make the selected directory before launch and read a bounded fallback token', calls: { mkdirSync: 1, lstatSync: 1, readFileSync: 1 } },
   'hosts.ts': {
     why: "cheap: the ssh socket directory checked per command, a session's files listed and stamped before it starts there, a host's copy replaced, Claude's token file",
     calls: { chmodSync: 2, existsSync: 3, lstatSync: 1, mkdirSync: 3, readFileSync: 1, readdirSync: 1, rmSync: 1, statSync: 1, writeFileSync: 2 },

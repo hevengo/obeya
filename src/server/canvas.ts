@@ -44,9 +44,11 @@ import { Revisions } from './revisions';
 import { ProjectAgents } from './project-agents';
 import { ghHosts, onGitHub, outsidePlanDir, planHistory, readPlanDocs, watchPlanDocs } from './repo';
 import { boundsOf, GAP, type Place, planDirNoteBox, unionBounds } from '../core/layout';
-import { type AgentRuntime, idleRuntime, withAgentSetting, withLimitWait, withRepoTrust, withSpend } from './runtime';
+import { type AgentRuntime, idleRuntime, withAgentSetting, withLimitWait, withRepoTrust, withSpend, sessionHarness } from './runtime';
 import { briefFull, type TagCard, tagCards } from './tag-proposal';
 import { Skills } from './skills';
+import type { HarnessSetups } from './harness-setup';
+import { findTranscript, threadsDirs, transcriptsDir } from './transcript';
 
 /** The skill lists of all canvases: several share a repository, and the user's skills are the same on each. */
 const sharedSkills = new Skills();
@@ -72,6 +74,7 @@ export interface CanvasDeps {
   runtime: AgentRuntime;
   /** The skills the cards' agents know (`skillsOf`); Claude Code on this machine tells, when left out. */
   skills?: Skills;
+  harnessSetups?: HarnessSetups;
   /** Runs the cards' workers; `runtime` when left out. */
   workerRuntime?: AgentRuntime;
   /**
@@ -345,6 +348,10 @@ export class CanvasRuntime {
       runtime: deps.runtime,
       pathFor: (repo) => (this.repo(repo) ?? this.repos[0]!).read.path,
       settingsFor: this.settingsNow,
+      ...(deps.harnessSetups ? { transcript: (id: string, cwd: string | null) => {
+        const setup = deps.harnessSetups!.at(sessionHarness(id), id);
+        return findTranscript(id, cwd, transcriptsDir(setup.folder), threadsDirs(setup.folder));
+      } } : {}),
       repoLanguage: (repo) => (this.repo(repo) ?? this.repos[0]!).adapter.language,
     });
     this.learner = new Learner({
@@ -844,6 +851,7 @@ export class CanvasRuntime {
       runtime: deps.workerRuntime ?? deps.runtime,
       workspaces,
       adapter,
+      harnessSetups: deps.harnessSetups,
       machineSettings: this.settingsOf(rc),
       shares: () => !!repo.ref.share,
       repo: ref.id,
@@ -1524,9 +1532,25 @@ export class CanvasRuntime {
     const card = this.board.item(cardId);
     if (!card || card.kind === 'question' || !this.runs(card)) return [];
     const cwd = this.repoOf(card).read.path;
-    // an idea's agent loads no plugins; a review card's reads none of the repository's settings
+    const row = this.board.row(cardId);
+    // An idea and a project agent load no plugins. Remote work keeps the existing local menu.
     const idea = card.state === 'idea';
-    return this.skills.of({ cwd, plugins: idea ? [] : [OBEYA_PLUGIN], untrusted: (!idea && !!card.contribution) || (await this.claudeHeld(cwd)) });
+    const project = card.kind === 'project';
+    const session = card.state === 'planned' ? null : row.session_id;
+    const role = idea ? 'explorer' : project ? 'coordinator' : 'worker';
+    const harness = session ? sessionHarness(session) : card.agent?.harness ?? this.deps.agents?.(role).harness ?? 'claude';
+    const setups = this.deps.harnessSetups;
+    const setup = setups && !hostName(row.workspace) ? { harness, setup: setups.at(harness, session) } : {};
+    return this.skills.of({
+      cwd,
+      plugins: idea || project ? [] : [OBEYA_PLUGIN],
+      untrusted: (!idea && !!card.contribution) || (await this.claudeHeld(cwd)),
+      ...setup,
+    });
+  }
+
+  agentSkillsChanged() {
+    this.skills.clear();
   }
 
   /** Whether the app in the card's workspace answers, for the owner to try it by hand (`Workers.appUp`). */

@@ -406,6 +406,31 @@ repositories …" until then): problems, each repository's id and settings with 
 check reads each repository with git once however often it is named, all in parallel, without
 blocking the server.
 
+#### Agents and models
+
+Below the model choices, “Agents’ setup” offers “Your own setup” and “Their own setup” for Claude
+Code and Codex separately. A separate setup shows its folder, a sign-in status and the corresponding
+action: the Claude Code terminal sign-in or Codex's browser sign-in. It explains the effect on new
+agents and the need for a sign-in. Folder and mode changes take effect without restarting Obeya or
+its agents (see [Local agent setups](agents-and-workspaces.md#local-agent-setups)).
+
+“Copy my settings” is available once for a separate folder without settings. It takes missing
+settings, global instructions, skills, commands and subagents from the owner's setup. Codex's MCP
+definitions are in its configuration. For Claude Code, missing user MCP definitions are added to
+the folder's global state while its other entries stay as they were. Existing files and MCP
+definitions stay in place. Skill links keep their targets where the system supports links and
+their contents are copied where it does not. Harness and MCP sign-ins, installed plugin files,
+sessions, history and memories are left behind. The copy omits literal credentials in recognized
+settings and MCP authentication fields, while keeping references to environment variables. The dialog records what was copied and explains
+that the copied instructions and skills now apply to agents too. The copy is a starting point
+the owner edits independently.
+
+The dialog shows a copyable shell alias on macOS and Linux and a PowerShell function on Windows,
+using the saved folder and clearing inherited harness login variables for that invocation. The owner
+runs the harness directly through it to edit the setup, install
+plugins or pair Chrome. This is a deliberate exception to the convention of keeping routine Obeya
+actions in the app. Obeya only displays the example. It creates no shell scripts or aliases.
+
 #### Canvases
 
 A canvas chosen in the list fills the right side; first the one the page shows, then the last one

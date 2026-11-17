@@ -5,7 +5,7 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import type { Skill } from '../core/types';
-import { api } from './api';
+import { api, onAgentSkillsChanged } from './api';
 import { know, known } from './stored';
 import { signal } from './signal';
 
@@ -18,17 +18,25 @@ const FRESH_MS = 60_000;
 /** The card's list as asked, undefined until it came. */
 const lists = new Map<string, { skills?: Skill[]; at: number }>();
 const { emit: changed, on: subscribe } = signal();
+onAgentSkillsChanged(() => {
+  lists.clear();
+  changed();
+});
 
 function ask(cardId: string) {
   const kept = lists.get(cardId);
   if (kept && Date.now() - kept.at < FRESH_MS) return;
-  lists.set(cardId, { skills: kept?.skills, at: Date.now() });
-  api
-    .skills(cardId)
-    .then((skills) => lists.set(cardId, { skills, at: Date.now() }))
-    // none to offer, as if the agent knew none; asked again next time
-    .catch(() => lists.set(cardId, { skills: kept?.skills ?? [], at: 0 }))
-    .finally(changed);
+  const pending = { skills: kept?.skills, at: Date.now() };
+  lists.set(cardId, pending);
+  const found = (skills: Skill[], at: number) => {
+    if (lists.get(cardId) !== pending) return;
+    lists.set(cardId, { skills, at });
+    changed();
+  };
+  void api.skills(cardId).then(
+    (skills) => found(skills, Date.now()),
+    () => found(kept?.skills ?? [], 0),
+  );
 }
 
 const NONE: Skill[] = [];
@@ -36,7 +44,9 @@ const NONE: Skill[] = [];
 /** The skills of the card's agent (undefined while they are asked); none without a card. Asks again when `fresh` changes. */
 export function useSkills(cardId: string | undefined, fresh?: unknown): Skill[] | undefined {
   useEffect(() => {
-    if (cardId) ask(cardId);
+    if (!cardId) return;
+    ask(cardId);
+    return onAgentSkillsChanged(() => ask(cardId));
   }, [cardId, fresh]);
   return useSyncExternalStore(subscribe, () => (cardId ? lists.get(cardId)?.skills : NONE));
 }

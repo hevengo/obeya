@@ -210,6 +210,37 @@ export interface AgentsView {
   file: string;
   agents: Record<AgentRole, AgentSetting>;
   harnesses: HarnessView[];
+  setups?: Record<Harness, HarnessSetupView>;
   /** What a group the owner chose nothing for runs on here: Claude Code, unless only Codex is ready. */
   preset: Harness;
+}
+
+/** The location a local session started in, including the harness's default state-file convention. */
+export interface HarnessSetup {
+  folder: string;
+  mode: 'default' | 'inherited' | 'separate';
+}
+
+export interface SetupCopy {
+  settings: boolean;
+  instructions: boolean;
+  mcpServers: number;
+  skills: number;
+  commands: number;
+  agents: number;
+}
+
+export interface HarnessSetupView {
+  separate: boolean;
+  folder: string;
+  alias?: string;
+  canCopy?: boolean;
+  copied?: SetupCopy;
+}
+
+/** The card error whose setup is to be signed in to. */
+export interface LoginEvent {
+  canvas: string;
+  card: string;
+  event: number;
 }

@@ -3,7 +3,7 @@ import type { CardDiff } from '../core/diff';
 import { type Place, placeParam } from '../core/layout';
 import type { AccessView, ArchivePage, Pairing, RemoteSetting, CloudPreset, CanvasInfo, CanvasSnapshot, ClientMessage, CardAction, DemoSettings, Group, DemoSettingsView, DemoVoiceCheck, PageTags, NarrationLanguage, FirstCanvas, GitSetupPreview, MachineItem, MachineSectionId, MachineView, SetupCheck, SetupFolder, VoiceSetupView, CardEvent, CardPatch, CostsView, Item, Language, LanguageView, NewCard, Notice, OwnerHold, PendingRestart, ProjectHistory, ServerMessage, Skill, SourceUpdate, SpotInput, TalkRef, AppUpdate, Theme, ThemeView, Usage, UsageMeterView } from '../core/types';
 import type { Waiting } from '../core/card';
-import type { AgentRole, AgentSetting, Harness, AgentsView } from '../core/agents';
+import type { AgentRole, AgentSetting, Harness, AgentsView, LoginEvent } from '../core/agents';
 import type { CanvasConfig, ConfigSaved, ConfigView, ConfigChecked, PersonalSiteView, SiteSetupJob, TagProposalJob, RepoTrust, SettingsShared } from '../core/config';
 import { setCostsShown } from './costs';
 import type { Wish } from '../core/wish';
@@ -199,16 +199,20 @@ export const api = {
   saveAgents: (role: AgentRole, choice: Partial<AgentSetting>) => call<AgentsView>('PUT', '/api/agents', { [role]: choice }),
   /** Updates Claude Code in the background, here or on the host named; the view says how far it got. */
   updateHarness: (harness: Harness, host?: string) => call<AgentsView>('POST', '/api/agents/update', host === undefined ? { harness } : { harness, host }),
+  saveAgentSetup: (harness: Harness, separate: boolean, folder?: string) =>
+    call<AgentsView>('PUT', '/api/agents/setup', { harness, separate, folder }),
+  agentSetupAction: (harness: Harness, action: 'copy' | 'refresh', folder: string) =>
+    call<AgentsView>('POST', '/api/agents/setup', { harness, action, folder }),
   /** The setup assistant's list: what Obeya needs on this machine. */
   setup: () => call<MachineView>('GET', '/api/setup'),
   setupInstall: (section: MachineSectionId, id: MachineItem['id']) => call<MachineView>('POST', '/api/setup/install', { section, id }),
   /** Opens a terminal that logs in (`token`: Claude's `claude setup-token`); `opened: false` where Obeya found none. */
-  setupLogin: (section: MachineSectionId, id: MachineItem['id'], token?: boolean) => call<{ opened: boolean; command: string }>('POST', '/api/setup/login', { section, id, ...(token ? { token } : {}) }),
+  setupLogin: (section: MachineSectionId, id: MachineItem['id'], token?: boolean, error?: LoginEvent, folder?: string) => call<{ opened: boolean; command: string }>('POST', '/api/setup/login', { section, id, token, error, folder }),
   /** Starts a login to Codex here or on a host (`host`): the sign-in page for the browser, and the id to follow it by. */
-  codexLogin: (host: string | null) => call<{ id: string; url: string }>('POST', '/api/setup/codex-login', { host }),
+  codexLogin: (host: string | null, error?: LoginEvent, folder?: string) => call<{ id: string; url: string }>('POST', '/api/setup/codex-login', { host, error, folder }),
   codexLoginState: (id: string) => call<{ state: 'waiting' | 'done' | 'failed'; error?: string }>('GET', `/api/setup/codex-login?id=${encodeURIComponent(id)}`),
   /** The token from `claude setup-token`, for the sessions that run on a token. */
-  setupToken: (token: string) => call<{ saved: true }>('POST', '/api/setup/token', { token }),
+  setupToken: (token: string, error?: LoginEvent, folder?: string) => call<{ saved: true }>('POST', '/api/setup/token', { token, error, folder }),
   setupIdentity: (name: string, email: string) => call<MachineView>('POST', '/api/setup/identity', { name, email }),
   /** Whether the system's folder dialog is offered to this browser: the machine has one, and the browser runs on it. */
   setupPicker: () => call<{ picker: boolean }>('GET', '/api/setup/pick'),
@@ -429,6 +433,9 @@ export const onCardEvent = cardEvents.on;
 const reconnected = signal();
 export const onReconnect = reconnected.on;
 
+const agentSkillsChanged = signal();
+export const onAgentSkillsChanged = agentSkillsChanged.on;
+
 // A line taken out of a card's log (a comment deleted before it went to the worker).
 const cardEventsGone = signal<[cardId: string, id: number]>();
 export const onCardEventGone = cardEventsGone.on;
@@ -637,6 +644,7 @@ function keepOpen(key: string, link: Link): () => void {
       }
       if (msg.type === 'event') cardEvents.emit(msg.event);
       else if (msg.type === 'eventGone') cardEventsGone.emit(msg.cardId, msg.id);
+      else if (msg.type === 'agentSkillsChanged') agentSkillsChanged.emit();
       else if (msg.type === 'notice') notice(msg);
       else link.message(msg);
     };

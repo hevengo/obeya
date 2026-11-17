@@ -4,8 +4,8 @@ A chapter of the [design doc](../design.md), whose header says how it is written
 
 ### Agents
 
-Agents run on one of two harnesses, each the machine's own installation on its own login (the
-owner's subscription, no API key): Claude Code through the Agent SDK, or Codex through
+Agents run on one of two harnesses, through the machine's own installation and the account in its
+[agent setup](#local-agent-setups): Claude Code through the Agent SDK, or Codex through
 `codex app-server` (see Codex). Each group of agents runs on the harness the owner chose for it (see
 Harnesses, models and effort). The rest of this section describes Claude Code. The compiled app
 runs the machine's own (`claude` on the `PATH`, else `~/.local/bin`, or `OBEYA_CLAUDE`); the
@@ -45,6 +45,34 @@ since a session's instructions were built reaches the agent once, with its next 
 workstream's worker also its project's new decisions and the owner's notes that came during its turn
 (see Reading order). A call the settings want confirmed becomes the question the card waits on (see
 Refused and confirmed tool calls); Obeya's own tools are allowed by a `PreToolUse` hook.
+
+#### Local agent setups
+
+Each harness on this machine starts with the owner's setup by default. If Obeya was started with
+`CLAUDE_CONFIG_DIR` or `CODEX_HOME`, that is the respective owner's setup. Otherwise the harness
+uses its standard location (`~/.claude` with global state in `~/.claude.json`, or `~/.codex`). In
+Configuration the owner can choose a separate folder for each harness, initially
+`agents/claude` or `agents/codex` under Obeya's home. Obeya creates a missing folder when the
+owner saves it and when the harness starts there. The harness's normal files appear as it uses the
+folder. Repository instructions and the Obeya plugin still apply where they ordinarily would.
+Codex also reads shared skills in `~/.agents/skills`, even with another `CODEX_HOME`; the owner
+can disable individual shared skills in that setup's Codex configuration.
+
+All local agents and idle look-ups use the selected setup. A session keeps its initial setup
+through later turns, resting, server restarts and retrospectives. Sessions created before Obeya
+stored their location continue using the owner's setup. A new session takes the current setup;
+saving restarts none. Installed and logged-in status, model and skill discovery, plan usage,
+Claude Code's update channel and Chrome pairing use the applicable folder. A card's skill menu
+and a worker's demo skill name follow that session's setup. SSH hosts use their own setup.
+
+The folder is signed in independently. Claude Code keeps a distinct Keychain entry on macOS, or
+credentials in the folder on Windows and Linux. Codex keeps its own login and refreshes that
+login independently. Sharing a Codex login file between folders can invalidate it when a token
+refreshes. Claude Code can use a long-lived token explicitly entered for the folder as a fallback.
+Inherited harness login variables do not supply credentials to a new separate setup. A card's
+sign-in offer goes to the setup that reported the error, even if the active choice has changed
+since. Accounts can differ. Signing in twice to the same account draws from the same plan.
+System logins for git and forges keep their ordinary scope.
 
 #### Codex
 
@@ -684,6 +712,12 @@ a container say, reuses pids). A host needs git, Claude Code or Codex (with its 
 for its hooks), and what the repository's work needs.
 
 ### Decisions
+
+- **One optional local setup per harness** (owner, 2026-11-18): use the harness's own setup folder
+  to give Obeya agents global instructions, skills, permissions and a login of their own. The
+  default preserves the owner's interactive setup. A skill filter or a second skills folder
+  would cover skills alone. Groups share the same choice and existing sessions retain theirs.
+
 
 - **An idle agent's process goes once its prompt cache has expired, not sooner** (owner, 2026-11-09):
   waiting sessions held memory for nothing (15 sessions 3.9 GB on one day, five of them older than

@@ -1,3 +1,4 @@
+import type { HarnessSetup } from '../core/agents';
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -643,6 +644,8 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN code_video TEXT; ALTER TABLE cards ADD COLUMN code_videos TEXT;',
   'ALTER TABLE cards ADD COLUMN work_place TEXT;',
   'ALTER TABLE cards ADD COLUMN work_in TEXT;',
+  `CREATE TABLE session_setups (session_id TEXT PRIMARY KEY, setup TEXT NOT NULL);
+   ALTER TABLE events ADD COLUMN setup TEXT;`,
 ];
 
 /**
@@ -663,6 +666,7 @@ const EVENT_FIELDS = {
   reply: 'flag',
   forwarded: 'flag',
   token: 'flag',
+  setup: 'json',
 } as const satisfies Partial<Record<keyof CardEvent, 'text' | 'int' | 'flag' | 'json' | 'list'>>;
 type EventField = keyof typeof EVENT_FIELDS;
 const FIELDS = Object.entries(EVENT_FIELDS) as [EventField, (typeof EVENT_FIELDS)[EventField]][];
@@ -775,6 +779,16 @@ export class Store {
     // logs of their writes: what they hold now no canvas reads, and one never opened again would never drop it
     this.db.run('DELETE FROM shared_changes');
     this.db.run('DELETE FROM archive_changes');
+  }
+
+  /** The local setup of a harness session, if recorded when it started. */
+  sessionSetup(session: string): HarnessSetup | undefined {
+    const row = this.db.query('SELECT setup FROM session_setups WHERE session_id = ?').get(session) as { setup: string } | null;
+    return row ? JSON.parse(row.setup) : undefined;
+  }
+
+  keepSessionSetup(session: string, setup: HarnessSetup) {
+    this.db.run('INSERT OR IGNORE INTO session_setups (session_id, setup) VALUES (?, ?)', [session, JSON.stringify(setup)]);
   }
 
   /** A canvas's name as last stored; none for a canvas this database has never seen. */

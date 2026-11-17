@@ -55,6 +55,7 @@ export class UsageMeter extends Watched<PlanLimits> {
   private source: UsageSource | null = null;
   private timer: ReturnType<typeof setInterval> | undefined;
   private fetching = false;
+  private generation = 0;
   /** Rounds failed one after the other, and how many rounds to leave out before the next try. */
   private failures = 0;
   private skip = 0;
@@ -101,23 +102,36 @@ export class UsageMeter extends Watched<PlanLimits> {
   async refresh(): Promise<void> {
     if (!this.running() || this.fetching) return;
     this.fetching = true;
-    const source = (this.source ??= this.open());
+    const generation = this.generation;
+    let source = this.source;
     try {
+      source = this.source ??= this.open();
       const usage = await withTimeout(source.fetch(), FETCH_TIMEOUT_MS);
-      if (this.source === source) this.set(usage);
+      if (this.generation !== generation) return;
+      this.set(usage);
       this.failures = 0;
     } catch (e) {
+      if (this.generation !== generation) return;
       this.failures++;
       this.skip = Math.min(2 ** (this.failures - 1) - 1, MAX_SKIPPED);
       console.warn(`Obeya: the usage limits could not be fetched: ${messageOf(e)}`);
       // a new session next round; what was fetched last stands a little longer
       if (this.source === source) this.source = null;
-      source.close();
+      source?.close();
       const last = this.current();
       if (last && Date.now() - Date.parse(last.at) > STALE_MS) this.set(null);
     } finally {
-      this.fetching = false;
+      if (this.generation === generation) this.fetching = false;
     }
+  }
+
+  private reset() {
+    this.generation++;
+    this.fetching = false;
+    this.source?.close();
+    this.source = null;
+    this.failures = this.skip = 0;
+    this.set(null);
   }
 
   /** Stops fetching for good: the server stops. */
@@ -142,10 +156,7 @@ export class UsageMeter extends Watched<PlanLimits> {
     }
     clearInterval(this.timer);
     this.timer = undefined;
-    this.source?.close();
-    this.source = null;
-    // numbers from before would show as now once a page opens again
-    this.set(null);
+    this.reset();
   }
 }
 
@@ -206,8 +217,8 @@ export class UsageMeters extends Listeners {
  * An idle Claude Code session in `cwd` that is asked for the `/usage` data: without the owner's
  * settings, hooks and MCP servers, which it needs none of, and without a prompt.
  */
-export function claudeUsage(cwd: string): UsageSource {
-  const { q, close } = idleClaude(cwd, { settingSources: [] });
+export function claudeUsage(cwd: string, env = process.env): UsageSource {
+  const { q, close } = idleClaude(cwd, { settingSources: [] }, undefined, env);
   return { fetch: async () => usageOf(await q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true })), close };
 }
 

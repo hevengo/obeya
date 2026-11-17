@@ -3,6 +3,9 @@
 // session loads, and the skills Claude Code brings. Claude Code tells without a session doing any work
 // (no message, no tokens): a process starts, answers, and ends.
 
+import type { Harness, HarnessSetup } from '../core/agents';
+import { codexSkills } from './codex';
+import { ensureSetup, setupEnv } from './harness-setup';
 import type { SlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import type { Skill } from '../core/types';
 import { Kept } from '../core/kept';
@@ -13,6 +16,8 @@ import { messageOf } from '../core/text';
 /** Where an agent works, as far as its skills go. */
 export interface SkillPlace {
   cwd: string;
+  harness?: Harness;
+  setup?: HarnessSetup;
   /** Local plugins the agent's sessions load. */
   plugins: string[];
   /** The repository's Claude Code settings wait for the owner's trust: the session reads none of its files, its skills neither. */
@@ -64,10 +69,14 @@ const DESCRIPTION_MAX = 200;
 
 /** Asks Claude Code on this machine, with the machine's login and the user's settings. */
 export const sdkSkills: SkillLister = async (place) => {
+  const harness = place.harness ?? 'claude';
+  if (place.setup) ensureSetup(place.setup);
+  const env = place.setup ? setupEnv(harness, place.setup) : process.env;
+  if (harness === 'codex') return codexSkills(place.cwd, place.plugins, env);
   const { q, close } = idleClaude(place.cwd, {
     ...(place.plugins.length ? { plugins: place.plugins.map((path) => ({ type: 'local' as const, path })) } : {}),
     ...(place.untrusted ? { settingSources: ['user' as const] } : {}),
-  });
+  }, undefined, env);
   try {
     // which of Claude Code's own commands are skills, only the skill list says
     const [commands, skills] = await withTimeout(Promise.all([q.supportedCommands(), q.reloadSkills().then((r) => r.skills)]), ANSWER_MS, 'Claude Code did not list its skills');
@@ -89,12 +98,16 @@ export class Skills {
     private now = () => Date.now(),
   ) {}
 
+  clear() {
+    this.kept.clear();
+  }
+
   /** The skills at `place`: the list kept, asked afresh behind it once it is old; the first time, once Claude Code has answered. */
   of(place: SkillPlace): Promise<Skill[]> {
-    const key = JSON.stringify([place.cwd, place.plugins, place.untrusted]);
+    const key = JSON.stringify([place.cwd, place.plugins, place.untrusted, place.harness, place.setup]);
     let kept = this.kept.get(key);
     if (!kept) {
-      const failed = (e: unknown) => console.error(`Obeya: Claude Code did not list the skills in ${place.cwd}: ${messageOf(e)}`);
+      const failed = (e: unknown) => console.error(`Obeya: the harness did not list the skills in ${place.cwd}: ${messageOf(e)}`);
       this.kept.set(key, (kept = new Kept(() => this.list(place), { forMs: FRESH_MS, failed, forget: true, now: this.now })));
     }
     const skills = kept.get();

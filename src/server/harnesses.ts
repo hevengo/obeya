@@ -23,6 +23,7 @@ import { messageOf } from '../core/text';
 /** What a look at a harness found. */
 export interface HarnessFound {
   version?: string;
+  channel?: ClaudeChannel;
   loggedIn: boolean;
   /** How it is logged in, as it says ("ChatGPT"). */
   how?: string;
@@ -91,13 +92,17 @@ class Install {
     },
   ) {
     const { models, newest } = o;
-    if (models)
-      this.listed = new Kept(models, { forMs: MODELS_FOR_MS, failed: (e) => console.warn(`Obeya: ${this.named} did not list its models: ${messageOf(e)}`) });
+    if (models) this.resetModels();
     if (newest)
       this.newest = new Kept(() => newest(this.channel), {
         forMs: NEWEST_FOR_MS,
         failed: (e) => console.warn(`Obeya: npm did not say which ${NAMES[o.harness]} is the newest: ${messageOf(e)}`),
       });
+  }
+
+  resetModels() {
+    if (this.o.models)
+      this.listed = new Kept(this.o.models, { forMs: MODELS_FOR_MS, failed: (e) => console.warn(`Obeya: ${this.named} did not list its models: ${messageOf(e)}`) });
   }
 
   /** What a look found; another version may stand for other models, another channel for another newest. */
@@ -187,6 +192,7 @@ class Install {
 export class Harnesses extends Listeners {
   /** By harness, once looked at. */
   private found: Partial<Record<Harness, HarnessFound | null>> = {};
+  private setups: Record<Harness, number> = { claude: 0, codex: 0 };
   private models: { at: number; list: Promise<HarnessModel[]> } | undefined;
   /** When each harness here was last looked at. */
   private lookedAt: Record<Harness, number> = { claude: Date.now(), codex: Date.now() };
@@ -229,7 +235,9 @@ export class Harnesses extends Listeners {
         ...(o.claudeNewest ? { newest: o.claudeNewest } : {}),
         ...(o.updateClaude ? { update: o.updateClaude } : {}),
         look: async () => {
+          const stamp = this.setups.claude;
           const claude = await this.o.claude?.();
+          if (stamp !== this.setups.claude) return;
           this.lookedAt.claude = Date.now();
           if (claude !== undefined) this.set({ claude });
         },
@@ -241,7 +249,9 @@ export class Harnesses extends Listeners {
         ...(o.codexNewest ? { newest: () => o.codexNewest!() } : {}),
         ...(o.updateCodex ? { update: o.updateCodex } : {}),
         look: async () => {
+          const stamp = this.setups.codex;
           const codex = await (this.o.codex ?? findCodex)();
+          if (stamp !== this.setups.codex) return;
           this.lookedAt.codex = Date.now();
           this.set({ codex });
         },
@@ -255,19 +265,38 @@ export class Harnesses extends Listeners {
 
   /** Looks at the harnesses again. */
   async refresh(): Promise<void> {
+    const stamp = this.stamp();
     this.lookedAt = { claude: Date.now(), codex: Date.now() };
     const [claude, codex] = await Promise.all([this.o.claude?.(), (this.o.codex ?? findCodex)()]);
-    this.set({ ...(claude !== undefined ? { claude } : {}), codex });
+    this.set({ ...(claude !== undefined ? { claude } : {}), codex }, stamp);
+  }
+
+  /** A different local folder may have a different login, channel and catalog. */
+  async setupChanged(harness: Harness): Promise<void> {
+    this.setups[harness]++;
+    const before = this.found[harness];
+    this.found[harness] = { version: before?.version, loggedIn: false };
+    if (harness === 'codex') this.models = undefined;
+    else this.here.claude.resetModels();
+    this.emit();
+    await this.here[harness].look();
+  }
+
+  stamp() {
+    return { ...this.setups };
   }
 
   /** What a look found (null: not installed). */
-  set(found: Partial<Record<Harness, HarnessFound | null>>) {
+  set(found: Partial<Record<Harness, HarnessFound | null>>, stamp = this.setups) {
     const before = this.found;
-    this.found = { ...this.found, ...found };
+    this.found = { ...before };
+    for (const h of HARNESSES) {
+      if (h in found && stamp[h] === this.setups[h]) this.found[h] = found[h];
+    }
     if (JSON.stringify(this.found) === JSON.stringify(before)) return;
     // another Codex may list other models
     if (!this.ready('codex') || this.found.codex?.version !== before.codex?.version) this.models = undefined;
-    this.here.claude.found(this.found.claude?.version);
+    this.here.claude.found(this.found.claude?.version, this.found.claude?.channel);
     this.here.codex.found(this.found.codex?.version);
     this.emit();
   }
@@ -397,9 +426,10 @@ export class Harnesses extends Listeners {
 
   private async codexModels(): Promise<HarnessModel[]> {
     if (!this.models || Date.now() - this.models.at > MODELS_FOR_MS) {
+      const stamp = this.setups.codex;
       const list = (this.o.codexModels ?? codexModels)(this.o.cwd).catch((e) => {
         console.warn(`Obeya: Codex did not list its models: ${messageOf(e)}`);
-        this.models = undefined;
+        if (stamp === this.setups.codex) this.models = undefined;
         return [];
       });
       this.models = { at: Date.now(), list };
@@ -422,8 +452,8 @@ export async function findCodex(env: Record<string, string | undefined> = proces
  * settings, hooks and MCP servers, and without a prompt) that lists them; `there`: the session on
  * a host, started over its connection.
  */
-export async function claudeModels(cwd: string, there?: SshHost): Promise<ClaudeListed[]> {
-  const { q, close } = idleClaude(cwd, { settingSources: [] }, there);
+export async function claudeModels(cwd: string, there?: SshHost, env = process.env): Promise<ClaudeListed[]> {
+  const { q, close } = idleClaude(cwd, { settingSources: [] }, there, env);
   const timer = setTimeout(close, 30_000);
   try {
     return (await q.supportedModels()).map((m) => ({ value: m.value, ...(m.resolvedModel ? { resolvedModel: m.resolvedModel } : {}) }));
@@ -456,14 +486,15 @@ export function aliasesOf(listed: ClaudeListed[]): Partial<Record<AgentModel, st
  * from (`autoUpdatesChannel` in its settings: `latest`, the default, or `stable`), as npm has it.
  */
 export async function claudeNewest(channel?: ClaudeChannel, env: Record<string, string | undefined> = process.env, home = homedir()): Promise<string | undefined> {
-  if (!channel) {
-    channel = 'latest';
-    try {
-      const settings = await Bun.file(join(env.CLAUDE_CONFIG_DIR || join(home, '.claude'), 'settings.json')).json();
-      if (settings?.autoUpdatesChannel === 'stable') channel = 'stable';
-    } catch {}
-  }
-  return npmNewest('@anthropic-ai/claude-code', channel);
+  return npmNewest('@anthropic-ai/claude-code', channel ?? await claudeChannel(env, home));
+}
+
+export async function claudeChannel(env = process.env, home = homedir()): Promise<ClaudeChannel> {
+  try {
+    const settings = await Bun.file(join(env.CLAUDE_CONFIG_DIR || join(home, '.claude'), 'settings.json')).json();
+    if (settings?.autoUpdatesChannel === 'stable') return 'stable';
+  } catch {}
+  return 'latest';
 }
 
 /** The newest Codex, as npm has it (its `latest`, which `codex update` installs whatever installed it). */
