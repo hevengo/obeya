@@ -4,7 +4,7 @@ import type { HarnessSetup } from './agents';
 
 import type { DemoSettings, NarrationLanguage, VoiceKind } from '../../plugin/skills/demo/lib/settings.ts';
 import type { SetupId, SetupItem } from '../../plugin/skills/demo/lib/setup.ts';
-import type { AgentEffort, CardAgent, Harness } from './agents';
+import type { AgentEffort, AgentSpeed, CardAgent, Harness } from './agents';
 import type { Waiting } from './card';
 import type { CardLanding } from './config';
 import type { CardFile } from './files';
@@ -318,8 +318,8 @@ export interface Item {
    * try by hand, once it answers.
    */
   app?: string;
-  /** The harness, model and effort the card's agent session runs on, the model as the harness named it when the session started (`claude-opus-5-5`). */
-  runsOn?: { harness: Harness; model: string; effort?: AgentEffort };
+  /** The harness, model, effort and Codex speed of the card's session, as of its latest start or resume. */
+  runsOn?: { harness: Harness; model: string; effort?: AgentEffort; speed?: AgentSpeed };
   /**
    * What the card's agents cost so far in US dollars, estimated at API list prices (a project's: its
    * project agent's and its workstreams'); none before any reported a cost. Counted whether or not

@@ -62,7 +62,7 @@ export class ProjectAgents {
         cwd: this.repoPath(),
         resume: this.board.row(project.id).session_id ?? undefined,
         spendOn: project.id,
-        onSession: (id, model) => this.board.work(project.id, { session_id: id, model: model ?? null }),
+        onSession: ({ id, model, speed }) => this.board.work(project.id, { session_id: id, model: model ?? null, session_speed: speed ?? null }),
         permissionMode: this.permissionMode,
         system: `You are the project agent of the project "${project.title}", directed through Obeya. Its plan doc is ${project.plan?.file ?? '(none)'}${project.plan && outsidePlanDir(pathOfRef(project.plan.file)) ? '' : ' in this repository'}; you know it and the history of its workstreams.\n\n${INFORM_RULES}${rules}${toObeya ? `\n\n${TO_OBEYA}` : ''}`,
         message: [message, `Decisions taken in this project so far:\n${decisionLog(this.board.decisions(project.id))}`, this.preferences()].filter(Boolean).join('\n\n'),

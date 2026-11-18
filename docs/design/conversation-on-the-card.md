@@ -33,13 +33,14 @@ Beside the heading, once the card's agent has a session, the conversation names 
 runs on, once: the harness, the model as the harness reported it when the session started or
 resumed (Claude's model ids by family and version, "Claude Code · Opus 5.5"; Codex's by the name
 Codex lists them with, "Codex · GPT-6-Sol", as the menu beside the start button does; the id itself
-in the tooltip), and the effort Obeya started it with ("effort high"). It stays after the work is
-done, and a new session (the card started afresh) names its own. From the start until that session
-is there (the Coordinator checks the card, it waits in the queue, its workspace is made ready), the
-same place names what the agent will run on: the card's own choice over the workers' setting (see
-Harnesses, models and effort in Agents and workspaces), with the aliases as "Agents and models"
-names them ("Claude Code · Opus"). The phone, whose conversation panel has no
-heading, leaves it out.
+in the tooltip), the effort ("effort high") and the Codex speed ("speed Fast") Obeya last started
+or resumed it with. These stay visible after the work is done. Historical sessions with no recorded
+speed omit it until they resume. From the start until that session exists (the Coordinator checks
+the card, it waits in the queue, or its workspace is made ready), the same place previews the
+upcoming run, including when the card already has a session from earlier work. The card's choices
+take precedence over the workers' current settings, including for Codex speed (see Harnesses,
+models and effort in Agents and workspaces). The model appears by its alias as "Agents and models"
+lists it ("Claude Code · Opus"). The phone, whose conversation panel has no heading, leaves it out.
 
 Claude login errors offer "Reauthenticate" in the conversation, or, when a failed start's
 explanation above it shows the error, there alone: one error gets one button.

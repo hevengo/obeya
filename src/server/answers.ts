@@ -174,7 +174,7 @@ export class Answers {
         project,
         ...(asked ? { asked } : {}),
         onTool,
-        onSession: (id) => {
+        onSession: ({ id }) => {
           run.session = id;
           for (const x of run.talks) this.o.board.sheet.lookedUpIn(x, id);
         },
@@ -618,7 +618,7 @@ export class Answers {
         onTool: (name, input) => {
           if (!name.startsWith('mcp__')) this.o.board.log(cardId, 'activity', by, describeTool(name, input, this.o.board.t));
         },
-        onSession: (id, model) => this.o.board.work(cardId, { session_id: id, model: model ?? null }),
+        onSession: ({ id, model, speed }) => this.o.board.work(cardId, { session_id: id, model: model ?? null, session_speed: speed ?? null }),
         onLimit: (until, outage) => this.o.board.waitsForLimit({ card: cardId }, until, outage),
         onShown: (files) => this.showLive(cardId, 'talk', by, stored.talk, files),
         ...(prepared ? { prepared } : {}),
@@ -690,7 +690,7 @@ export class Answers {
     /** The turn takes the owner's words while it reads (`Briefing.onHearing`). */
     onHearing?: Briefing['onHearing'];
     onTool: (name: string, input: Record<string, unknown>) => void;
-    onSession: (id: string, model?: string) => void;
+    onSession: NonNullable<Briefing['onSession']>;
     /** Where it shows that it waits for the usage limit. */
     onLimit: OnLimit;
     /** The walkthrough of the answer has its first slide: its player shows before the answer's words. */

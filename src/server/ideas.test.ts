@@ -32,6 +32,13 @@ describe('an idea', () => {
     expect(() => canvas.act(i.id, { action: 'start' })).toThrow('only a planned card can be started');
   });
 
+  test('names the speed of its Codex exploration session', () => {
+    const i = idea();
+    canvas.act(i.id, { action: 'discuss', text: 'Explore the idea' });
+    explorer().emit({ type: 'session', id: 'codex:exploration', model: 'gpt-6.1-sol', speed: 'fast' });
+    expect(item(i.id).runsOn).toEqual({ harness: 'codex', model: 'gpt-6.1-sol', speed: 'fast' });
+  });
+
   test('is discussed with an agent that has a worker’s tools, keeps the brief and records decisions', () => {
     const i = idea();
     canvas.act(i.id, { action: 'discuss', text: 'Lass uns das durchdenken.' });

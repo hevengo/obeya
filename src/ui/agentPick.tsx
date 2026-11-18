@@ -4,19 +4,43 @@
 // the menu; a choice of the card's own is named beside it. One component for every button that
 // starts a card.
 
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { CardAction, Item, RepoRef } from '../core/types';
 import { AGENT_EFFORTS, AGENT_SPEEDS, type AgentSpeed, type AgentEffort, type AgentModel, type AgentsView, type HarnessUpdate as HarnessUpdateState, type CardAgent, type Harness, HARNESSES, modelChoices, type ModelChoice, modelName } from '../core/agents';
 import { useMenuClose, usePlaced } from './menu';
 import { canChooseWorkIn } from '../core/card';
-import { api } from './api';
+import { api, onAgentSkillsChanged, onReconnect } from './api';
 import { usePoll } from './act';
+import { signal } from './signal';
 import { t } from './strings';
 
-/** The harnesses and the workers' group as last heard, shown at once by the next card while it asks again. */
+/** The same harness and group settings for the start menu and the conversation heading. */
 let last: AgentsView | null = null;
-const agentsView = () => api.agents().then((v) => (last = v));
+let request = 0;
+const changes = signal();
+const rememberAgentsView = (v: AgentsView) => {
+  if (last === v) return;
+  last = v;
+  changes.emit();
+};
+const agentsView = () => {
+  const asked = ++request;
+  return api.agents().then((v) => {
+    if (asked === request) rememberAgentsView(v);
+    return v;
+  });
+};
+const refreshAgents = () => void agentsView().catch(() => {});
+const refreshKnownAgents = () => { if (request) refreshAgents(); };
+// Saving the group settings or changing a harness setup invalidates the skills of open cards too.
+onAgentSkillsChanged(refreshKnownAgents);
+onReconnect(refreshKnownAgents);
+
+function useAgentsView(active: boolean) {
+  useEffect(() => { if (active) refreshAgents(); }, [active]);
+  return useSyncExternalStore(changes.on, () => active ? last : null);
+}
 
 /** A model as a picker names it, without its version: Claude's by Obeya's names for them, Codex's by the name Codex gives, else its id. */
 export const modelLabel = (harness: Harness, m: Pick<ModelChoice, 'value' | 'name'>) => (harness === 'claude' ? (t.config.agents.models[m.value as AgentModel] ?? m.value) : (m.name ?? m.value));
@@ -40,17 +64,12 @@ const choice = (c: CardAgent): CardAgent | null => (c.harness || c.effort || c.s
  * the card's own is named beside them. Where the harnesses are not known (yet), the start button alone.
  */
 export function AgentPick({ item, repo, act, primary = true, children }: { repo?: RepoRef | undefined; item: Item; act: (a: CardAction) => Promise<void>; primary?: boolean; children: ReactNode }) {
-  const [view, setView] = useState<AgentsView | null>(last);
+  const view = useAgentsView(true);
   const [open, setOpen] = useState(false);
   // a start while the choice is still on its way would run on the one before
   const [saving, setSaving] = useState(false);
   const box = useRef<HTMLSpanElement>(null);
   const menu = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    let live = true;
-    agentsView().then((v) => live && setView(v), () => {});
-    return () => void (live = false);
-  }, []);
   usePlaced(open, menu, () => box.current!.getBoundingClientRect());
   // the menu lies over the page, above the panel and the controls floating over it, and is part of the box for closing it
   useMenuClose(open, [box, menu], () => setOpen(false), true);
@@ -92,7 +111,12 @@ export function AgentPick({ item, repo, act, primary = true, children }: { repo?
     setSaving(true);
     void act({ action: 'workIn', workIn: next === defaultPlace ? null : next }).catch(() => {}).finally(() => setSaving(false));
   };
-  const chosen = [canChooseWorkIn(item) && item.workIn ? p.places[item.workIn] : '', mine ? agentLabel(view, mine.harness, mine.model) : '', own.effort ? p.chosenEffort(efforts[own.effort]) : '', harness === 'codex' && own.speed ? p.chosenSpeed(t.config.agents.speeds[own.speed]) : ''].filter(Boolean).join(' · ');
+  const chosen = [
+    canChooseWorkIn(item) && item.workIn ? p.places[item.workIn] : '',
+    mine ? agentLabel(view, mine.harness, mine.model) : '',
+    own.effort ? p.chosenEffort(efforts[own.effort]) : '',
+    harness === 'codex' && (mine || own.speed) ? p.chosenSpeed(t.config.agents.speeds[speed]) : '',
+  ].filter(Boolean).join(' · ');
   return (
     <span className={saving ? 'agent-split saving' : 'agent-split'} ref={box}>
       {children}
@@ -103,7 +127,7 @@ export function AgentPick({ item, repo, act, primary = true, children }: { repo?
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => {
-          if (!open) agentsView().then(setView, () => {});
+          if (!open) refreshAgents();
           setOpen(!open);
         }}
       >
@@ -148,7 +172,7 @@ export function AgentPick({ item, repo, act, primary = true, children }: { repo?
                       </button>
                     );
                   })}
-                  <HarnessUpdate harness={h} view={view} onView={setView} />
+                  <HarnessUpdate harness={h} view={view} />
                 </div>
               );
             })}
@@ -185,7 +209,7 @@ export function AgentPick({ item, repo, act, primary = true, children }: { repo?
  * whose installation is behind; while an update runs, the view is asked again until it is done, and
  * then has the new version's models.
  */
-export function HarnessUpdate({ harness, view, onView }: { harness: Harness; view: AgentsView; onView: (view: AgentsView) => void }) {
+export function HarnessUpdate({ harness, view, onView }: { harness: Harness; view: AgentsView; onView?: (view: AgentsView) => void }) {
   const found = view.harnesses.find((h) => h.id === harness);
   const hosts = (found?.hosts ?? []).filter((h) => h.update);
   const running = !!found?.update?.running || hosts.some((h) => h.update?.running);
@@ -195,7 +219,8 @@ export function HarnessUpdate({ harness, view, onView }: { harness: Harness; vie
     setAsked(host ?? '');
     api
       .updateHarness(harness, host)
-      .then((v) => ((last = v), onView(v)))
+      .then(agentsView)
+      .then(onView)
       .catch(() => {})
       .finally(() => setAsked(null));
   };
@@ -229,31 +254,30 @@ const Check = ({ on }: { on: boolean }) => (
 );
 
 /**
- * Beside the conversation's heading: the harness, model and effort the card's agent session runs on;
+ * Beside the conversation's heading: the harness, model, effort and Codex speed of the card's session;
  * once the card is started and before that session is there (Obeya checks it, it waits in the queue,
  * its workspace is made ready), what it will run on: the card's choice over the workers' setting.
  */
 export function RunsOn({ item }: { item: Item }) {
-  const starting = !item.runsOn && (item.state === 'working' || (item.state === 'planned' && !!item.queue));
+  // A new run can be queued while the previous session still belongs to the card.
+  const queued = item.state === 'planned' && !!item.queue;
+  const session = queued ? undefined : item.runsOn;
+  const starting = queued || (!session && item.state === 'working');
   // Codex's models go by the names Codex gives them, as in the menu and before the session started
-  const codex = item.runsOn?.harness === 'codex';
-  const [view, setView] = useState<AgentsView | null>(last);
-  useEffect(() => {
-    if (!starting && !codex) return;
-    let live = true;
-    agentsView().then((v) => live && setView(v), () => {});
-    return () => void (live = false);
-  }, [starting, codex]);
-  const efforts = t.config.agents.efforts;
-  if (item.runsOn) {
-    const { harness, model, effort } = item.runsOn;
+  const codex = session?.harness === 'codex';
+  const view = useAgentsView(starting || codex);
+  const { efforts, speeds } = t.config.agents;
+  if (session) {
+    const { harness, model, effort, speed } = session;
     // not the id first and the name a moment later
     if (codex && !view) return null;
     const name = codex ? (view?.harnesses.find((h) => h.id === 'codex')?.models.find((m) => m.id === model)?.name ?? model) : modelName(model);
+    const speedName = codex && speed ? speeds[speed] : undefined;
     return (
-      <span className="runs-on" title={t.talk.runsOn(t.harnesses[harness], model, effort && efforts[effort])}>
+      <span className="runs-on" title={t.talk.runsOn(t.harnesses[harness], model, effort && efforts[effort], speedName)}>
         {t.harnesses[harness]} · {name}
         {effort && ` · ${t.agentPick.chosenEffort(efforts[effort])}`}
+        {speedName && ` · ${t.agentPick.chosenSpeed(speedName)}`}
       </span>
     );
   }
@@ -261,7 +285,11 @@ export function RunsOn({ item }: { item: Item }) {
   const group = view.agents.worker;
   const own = item.agent ?? {};
   const on = own.harness && own.model ? { harness: own.harness, model: own.model } : group;
-  const label = [agentLabel(view, on.harness, on.model), t.agentPick.chosenEffort(efforts[own.effort ?? group.effort])].join(' · ');
+  const label = [
+    agentLabel(view, on.harness, on.model),
+    t.agentPick.chosenEffort(efforts[own.effort ?? group.effort]),
+    ...(on.harness === 'codex' ? [t.agentPick.chosenSpeed(speeds[own.speed ?? group.speed ?? 'normal'])] : []),
+  ].join(' · ');
   return (
     <span className="runs-on" title={t.talk.startsOn(label)}>
       {label}

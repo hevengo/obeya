@@ -20,8 +20,9 @@ Persistent (SQLite):
   the commits its landed work spans and whether it went straight past a pull request, and the pull
   request that takes merged work back (see Taking back an approval in Card lifecycle);
   a waiting card's stopped app, or where its app runs for the owner to try; the clone that keeps a
-  card's branch since its workspace was taken from it; the model its session runs on; the files its
-  worker named as its result, and both the behaviour demo and private code video, with their independent earlier handovers;
+  card's branch since its workspace was taken from it; its session's model, effort and Codex speed;
+  the files its worker named as its result, and both the behaviour demo and private code video,
+  with their independent earlier handovers;
   timed comments identify the video as well as its handover, with absent identity on old comments
   meaning the behaviour demo;
   proposals waiting for the owner; the new repository a card is to be built in, and that Obeya made

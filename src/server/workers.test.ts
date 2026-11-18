@@ -1484,14 +1484,18 @@ describe('workers', () => {
     expect(runtime.last.inbox[0]).toContain('Answer to your question');
   });
 
-  test('the card names the harness, model and effort its session runs on, the model as the harness reported it', async () => {
+  test('the card names the harness, model, effort and speed of its session', async () => {
     const c = manual();
     await workers.start(c.id);
     expect(board.item(c.id)!.runsOn).toBeUndefined();
     runtime.last.emit({ type: 'session', id: 'sess-1', model: 'claude-opus-5-5', effort: 'high' });
     expect(board.item(c.id)!.runsOn).toEqual({ harness: 'claude', model: 'claude-opus-5-5', effort: 'high' });
     // a session that replaces it on Codex names its own; one that names none leaves the card without
-    runtime.last.emit({ type: 'session', id: 'codex:thread-1', model: 'gpt-5.5' });
+    runtime.last.emit({ type: 'session', id: 'codex:thread-1', model: 'gpt-5.5', speed: 'ultrafast' });
+    expect(board.item(c.id)!.runsOn).toEqual({ harness: 'codex', model: 'gpt-5.5', speed: 'ultrafast' });
+    // A saved session from before speed was recorded still names the model.
+    store.update(c.id, { session_speed: null });
+    board.changed();
     expect(board.item(c.id)!.runsOn).toEqual({ harness: 'codex', model: 'gpt-5.5' });
     runtime.last.emit({ type: 'session', id: 'sess-2' });
     expect(board.item(c.id)!.runsOn).toBeUndefined();

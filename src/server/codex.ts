@@ -642,11 +642,12 @@ class CodexSession implements AgentSession {
     const model = await this.model(server);
     await plugins;
     if (this.closed) return;
+    const speed = spec.speed ?? 'normal';
     const settings = {
       cwd,
       model,
       // Explicit standard routing also overrides a faster tier in Codex's own config or a resumed thread.
-      serviceTier: spec.speed === 'fast' ? 'priority' : spec.speed === 'ultrafast' ? 'ultrafast' : 'default',
+      serviceTier: speed === 'fast' ? 'priority' : speed === 'ultrafast' ? 'ultrafast' : 'default',
       approvalPolicy: spec.readOnly ? 'never' : 'on-request',
       ...(spec.readOnly ? {} : { approvalsReviewer: 'auto_review' }),
       sandbox: spec.readOnly ? 'read-only' : 'workspace-write',
@@ -669,7 +670,7 @@ class CodexSession implements AgentSession {
     }
     this.thread = opened.thread.id;
     this.modelId = opened.model ?? model;
-    this.emit({ type: 'session', id: `${CODEX_SESSION}${this.thread}`, ...(opened.model ? { model: opened.model } : {}), ...(this.effort ? { effort: this.effort } : {}) });
+    this.emit({ type: 'session', id: `${CODEX_SESSION}${this.thread}`, ...(opened.model ? { model: opened.model } : {}), ...(this.effort ? { effort: this.effort } : {}), speed });
     this.pump();
     const code = await exited;
     if (this.closed) return;

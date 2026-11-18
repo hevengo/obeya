@@ -1,9 +1,8 @@
-import type { HarnessSetup } from '../core/agents';
+import type { AgentSpeed, CardAgent, HarnessSetup } from '../core/agents';
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { AdoptedBranch, CardEvent, ChangeSize, DeviceView, CardKind, CardState, Need, Preference, PreferenceState, Proposal, ProposedSetting, Queue, SettingProposal, SettingProposalState, Snooze } from '../core/types';
-import type { CardAgent } from '../core/agents';
 import type { RepoCommands } from '../core/config';
 import type { CardFile } from '../core/files';
 import type { PlanDoc } from '../core/plan-doc';
@@ -48,6 +47,8 @@ export interface CardRow {
   change_size: Json<ChangeSize> | null;
   /** The effort that session runs with, as Obeya started it (`high`). */
   effort: string | null;
+  /** The Codex speed Obeya started or resumed the session with. */
+  session_speed: AgentSpeed | null;
   /** What its agents' sessions cost so far in US dollars, as their harnesses estimated it (`Store.spend`); null before any reported a cost. */
   spent: number | null;
   /** The harness, model and effort the owner chose for the card's agent, over its group's. */
@@ -646,6 +647,7 @@ export const MIGRATIONS = [
   'ALTER TABLE cards ADD COLUMN work_in TEXT;',
   `CREATE TABLE session_setups (session_id TEXT PRIMARY KEY, setup TEXT NOT NULL);
    ALTER TABLE events ADD COLUMN setup TEXT;`,
+  'ALTER TABLE cards ADD COLUMN session_speed TEXT;',
 ];
 
 /**

@@ -176,9 +176,9 @@ models" lists them, the efforts the model takes, and Normal, Fast and Ultrafast 
 selected, with what applies checked (the workers' setting until the card has one of its own).
 Picking what the workers have is no choice of the card's: it follows their setting. What the card
 chose of its own stands small beside the button ("Codex · Sol ·
-effort very high · speed Fast"); without a choice nothing does. Speed is independent of model and
-effort; changing either keeps it, while choosing Claude Code clears it. An explicit Normal speed
-overrides a faster group setting. The choice is the card's, stored with it, and
+effort very high · speed Fast"). A Codex model shown there includes its speed, even when inherited.
+Speed is independent of model and effort; changing either keeps it, while choosing Claude Code
+clears it. An explicit Normal speed overrides a faster group setting. The choice is the card's, stored with it, and
 goes with every session of its next run, the ones resumed after a restart included, and with the
 instructions that differ by harness (how a worker waits); what it leaves out is the workers'. It
 changes only while the card waits to start (planned, proposed, in the queue); once it is at work the

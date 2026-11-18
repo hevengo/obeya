@@ -7,7 +7,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { type Language, ownersLanguage } from '../core/locale';
 import type { AnswerFile, Question } from '../core/types';
-import { type AgentRuntime, type AgentTool, BackgroundWait, type OnLimit } from './runtime';
+import { type AgentEvent, type AgentRuntime, type AgentTool, BackgroundWait, type OnLimit } from './runtime';
 import { clip, oneLine } from '../core/text';
 
 /** An answer to a question the owner asked, for the card or the sheet, with the files it comes with. */
@@ -22,8 +22,7 @@ export interface Briefing {
   system: string;
   message: string;
   resume?: string;
-  /** The session's id and the model it runs on (`AgentEvent` `session`). */
-  onSession?: (id: string, model?: string) => void;
+  onSession?: (session: Extract<AgentEvent, { type: 'session' }>) => void;
   /** The card the agent answers for (a project's agent), whose cost it counts to (`AgentSpec.spendOn`). */
   spendOn?: string;
   /** What the agent reads, as it reads it. */
@@ -175,7 +174,7 @@ export function inform(b: Briefing): Promise<OwnerAnswer> {
           // a turn may also start without a message (finished background work)
           work.stop();
           if (e.type === 'text' || e.type === 'tool') unseen = undefined;
-          if (e.type === 'session') b.onSession?.(e.id, e.model);
+          if (e.type === 'session') b.onSession?.(e);
           else if (e.type === 'text') last = e.text;
           else if (e.type === 'tool') b.onTool?.(e.name, e.input);
           else if (e.type === 'error' && !answer) {

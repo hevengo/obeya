@@ -2937,7 +2937,7 @@ export class Workers {
         // a session that replaces another (none resumed, say) keeps the one before for the work retrospective
         const before = this.o.board.row(cardId).session_id;
         if (before && before !== e.id) this.o.board.log(cardId, 'state', 'obeya', this.o.board.t.worker.newSession(this.o.board.t.worker.earlierRun(before)));
-        this.o.board.work(cardId, { session_id: e.id, model: e.model ?? null, effort: e.effort ?? null });
+        this.o.board.work(cardId, { session_id: e.id, model: e.model ?? null, effort: e.effort ?? null, session_speed: e.speed ?? null });
         break;
       }
       case 'text':

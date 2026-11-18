@@ -62,6 +62,7 @@ describe.skipIf(process.platform === 'win32')('a Codex session through the app s
       await until(() => s.idles() === 1);
       const method = resume ? 'thread/resume' : 'thread/start';
       expect(s.requests().find((r) => r.method === method)!.params.serviceTier).toBe(tier);
+      expect(s.events[0]).toMatchObject({ type: 'session', speed: speed ?? 'normal' });
       s.session.send('another turn');
       await until(() => s.idles() === 2);
       // later turns inherit the explicit tier rather than Codex's configuration or the old thread's
@@ -87,7 +88,7 @@ describe.skipIf(process.platform === 'win32')('a Codex session through the app s
     await until(() => s.idles() === 1);
     // kept marked as Codex's, so that a resume goes to Codex whatever the group runs on by then; with the model Codex runs it on,
     // the preset family's newest where none is named
-    expect(s.events[0]).toEqual({ type: 'session', id: 'codex:thread-1', model: 'gpt-6.1-sol' });
+    expect(s.events[0]).toEqual({ type: 'session', id: 'codex:thread-1', model: 'gpt-6.1-sol', speed: 'normal' });
     expect(s.texts()).toEqual(['echo: hello']);
     const thread = s.requests().find((r) => r.method === 'thread/start')!.params;
     expect(thread).toMatchObject({ developerInstructions: 'You are a test agent.', approvalPolicy: 'on-request', approvalsReviewer: 'auto_review', sandbox: 'workspace-write' });
@@ -133,7 +134,7 @@ describe.skipIf(process.platform === 'win32')('a Codex session through the app s
     await until(() => s.idles() === 1);
     expect(s.requests().find((r) => r.method === 'thread/start')!.params.model).toBe('gpt-6-luna');
     expect(s.requests().find((r) => r.method === 'turn/start')!.params.effort).toBe('high');
-    expect(s.events[0]).toEqual({ type: 'session', id: 'codex:thread-1', model: 'gpt-6-luna', effort: 'high' });
+    expect(s.events[0]).toEqual({ type: 'session', id: 'codex:thread-1', model: 'gpt-6-luna', effort: 'high', speed: 'normal' });
     // a newer version in the catalog of the machine it runs on is taken, a family it no longer lists runs on the default
     const newer = [{ id: 'gpt-6.2-sol', isDefault: true }, { id: 'gpt-6.1-sol' }];
     const t = start({ model: 'gpt-#-sol', env: { FAKE_CODEX_MODELS: JSON.stringify(newer) } }, 'hello');
@@ -186,7 +187,7 @@ describe.skipIf(process.platform === 'win32')('a Codex session through the app s
   test('resumes a thread by its id, whose tools Codex keeps, on its family resolved afresh', async () => {
     const s = start({ resume: 'codex:thread-7', model: 'gpt-#-luna' }, 'again');
     await until(() => s.idles() === 1);
-    expect(s.events[0]).toEqual({ type: 'session', id: 'codex:thread-7', model: 'gpt-6-luna' });
+    expect(s.events[0]).toEqual({ type: 'session', id: 'codex:thread-7', model: 'gpt-6-luna', speed: 'normal' });
     const resume = s.requests().find((r) => r.method === 'thread/resume')!.params;
     expect(resume.threadId).toBe('thread-7');
     expect(resume.model).toBe('gpt-6-luna');

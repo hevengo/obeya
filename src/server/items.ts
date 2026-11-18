@@ -243,7 +243,14 @@ function work(r: CardRow, themeNow?: ThemeNow): Partial<Item> {
     ...(r.pausing && !r.paused ? { pausing: true } : {}),
     ...(r.snoozed ? { snoozed: fromJson(r.snoozed) } : {}),
     ...(r.app && r.workspace && !r.parked ? { app: r.app } : {}),
-    ...(r.session_id && r.model ? { runsOn: { harness: sessionHarness(r.session_id), model: r.model, ...(r.effort ? { effort: r.effort as AgentEffort } : {}) } } : {}),
+    ...(r.session_id && r.model
+      ? { runsOn: {
+          harness: sessionHarness(r.session_id),
+          model: r.model,
+          ...(r.effort ? { effort: r.effort as AgentEffort } : {}),
+          ...(r.session_speed ? { speed: r.session_speed } : {}),
+        } }
+      : {}),
     ...(r.agent ? { agent: cardAgentOf(r.agent) } : {}),
     ...(r.spent ? { spent: r.spent } : {}),
   };

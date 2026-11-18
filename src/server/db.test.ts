@@ -279,6 +279,7 @@ test('adding code videos preserves a legacy handover and stores each history ind
     s.db.run('ALTER TABLE cards DROP COLUMN work_place');
     s.db.run('ALTER TABLE cards DROP COLUMN code_video');
     s.db.run('ALTER TABLE cards DROP COLUMN code_videos');
+    s.db.run('ALTER TABLE cards DROP COLUMN session_speed');
     s.db.run('DROP TABLE session_setups; ALTER TABLE events DROP COLUMN setup;');
     s.db.run('PRAGMA user_version = 91');
     s.db.close();

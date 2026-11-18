@@ -25,8 +25,8 @@ export interface AgentTool {
 }
 
 export type AgentEvent =
-  /** The session's id, once it started or resumed, and the model it runs on as the harness names it, where it says. */
-  | { type: 'session'; id: string; model?: string; effort?: AgentEffort }
+  /** The session's id once started or resumed, with its reported model and the effort and speed Obeya applied, where available. */
+  | { type: 'session'; id: string; model?: string; effort?: AgentEffort; speed?: AgentSpeed }
   | { type: 'text'; text: string }
   | { type: 'tool'; name: string; input: Record<string, unknown> }
   /**

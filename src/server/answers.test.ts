@@ -657,8 +657,8 @@ describe('a looked-up answer goes on', () => {
 
 describe('a thread on a Question card', () => {
   /** A thread of two answers in the sheet, moved onto a card. */
-  async function moved() {
-    const first = await lookedUp('stimmen die septembergutschriften?', 'September feed-in credits: correct?', 'Ja.', 'look-1');
+  async function moved(session = 'look-1') {
+    const first = await lookedUp('stimmen die septembergutschriften?', 'September feed-in credits: correct?', 'Ja.', session);
     const out = answersDir(dir, canvas.id, first);
     await say('mach ein excel', {}, 'look_up', { question: 'An Excel of the numbers?', follows: `A${first}`, confirm: 'Moment.' });
     const a = answerer();
@@ -671,9 +671,9 @@ describe('a thread on a Question card', () => {
   }
 
   test('"Make it a card" moves the thread with its files onto a card that goes on with the same agent', async () => {
-    const { first, card } = await moved();
+    const { first, card } = await moved('codex:look-1');
     expect(card).toMatchObject({ kind: 'question', state: 'done', title: 'September feed-in credits: correct?', thread: { talk: first, answers: 2, files: 1 } });
-    expect(board().row(card.id).session_id).toBe('look-1');
+    expect(board().row(card.id).session_id).toBe('codex:look-1');
     expect(board().events(card.id).map((e) => [e.author, e.text, e.answer?.files?.length ?? 0])).toEqual([
       ['owner', 'stimmen die septembergutschriften?', 0],
       ['coordinator', 'Ja.', 0],
@@ -689,7 +689,9 @@ describe('a thread on a Question card', () => {
     canvas.tell(card.id, 'und im Oktober?', [], false);
     expect(board().item(card.id)!.thread!.thinking).toBe(true);
     const a = answerer();
-    expect(a.spec.resume).toBe('look-1');
+    expect(a.spec.resume).toBe('codex:look-1');
+    a.emit({ type: 'session', id: 'codex:look-1', model: 'gpt-6.1-sol', speed: 'normal' });
+    expect(board().item(card.id)!.runsOn).toEqual({ harness: 'codex', model: 'gpt-6.1-sol', speed: 'normal' });
     expect(a.spec.tools.map((t) => t.name)).toContain('to_obeya');
     expect(a.inbox[0]).toContain('und im Oktober?');
     // what comes while it reads goes into this turn with its next step, unread until then, and can be taken back until then

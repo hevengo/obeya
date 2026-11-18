@@ -271,7 +271,7 @@ const de = {
     repoDefault: 'Repository-Standard',
     placeHint: 'Im Projektordner wird auf dem vorhandenen Branch gearbeitet, ohne eigenen Branch. Änderungen werden aufgelistet und können verworfen werden. Der Arbeitsort bleibt während des Laufs fest.',
     /** Beside it while the card has a choice of its own. */
-    chosenHint: 'Gilt nur für diese Karte, für jede Sitzung ihres Laufs. Ändern im Menü daneben.',
+    chosenHint: 'Einstellungen für den nächsten Lauf. Ändern im Menü daneben.',
     effort: 'Effort',
     /** The effort chosen, beside the harness and model in the line beside the button. */
     chosenEffort: (effort: string) => `Effort ${effort}`,
@@ -478,7 +478,7 @@ const de = {
   talk: {
     heading: 'Gespräch',
     /** Beside the heading: what the card's agent runs on, the model's id as its harness names it in the tooltip. */
-    runsOn: (harness: string, model: string, effort?: string) => `Der Agent dieser Karte läuft auf ${harness} mit dem Modell ${model}${effort ? `, Effort ${effort}` : ''}`,
+    runsOn: (harness: string, model: string, effort?: string, speed?: string) => `Der Agent dieser Karte läuft auf ${harness} mit dem Modell ${model}${effort ? `, Effort ${effort}` : ''}${speed ? `, Geschwindigkeit ${speed}` : ''}`,
     /** The same once the card is started, before its agent's session is there: what it will run on. */
     startsOn: (what: string) => `Der Agent dieser Karte wird darauf laufen: ${what}`,
     empty: 'Noch nichts passiert.',
@@ -2708,7 +2708,7 @@ const en: Strings = {
     places: { workspace: 'A workspace of its own', 'project-folder': 'The project folder' },
     repoDefault: 'repository default',
     placeHint: 'In the project folder, work uses the branch as it stands, without its own branch. Changes are listed and can be discarded. The choice stays fixed during the run.',
-    chosenHint: 'Holds for this card alone, for every session of its run. Change it in the menu beside.',
+    chosenHint: 'Settings for the next run. Change them in the menu beside.',
     effort: 'Effort',
     chosenEffort: (effort: string) => `effort ${effort}`,
     chosenSpeed: (speed: string) => `speed ${speed}`,
@@ -2883,7 +2883,7 @@ const en: Strings = {
   task: 'Task',
   talk: {
     heading: 'Conversation',
-    runsOn: (harness: string, model: string, effort?: string) => `This card's agent runs on ${harness} with the model ${model}${effort ? `, effort ${effort}` : ''}`,
+    runsOn: (harness: string, model: string, effort?: string, speed?: string) => `This card's agent runs on ${harness} with the model ${model}${effort ? `, effort ${effort}` : ''}${speed ? `, speed ${speed}` : ''}`,
     startsOn: (what: string) => `This card's agent will run on ${what}`,
     empty: 'Nothing has happened yet.',
     working: 'working …',
