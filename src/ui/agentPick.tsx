@@ -18,6 +18,7 @@ import { t } from './strings';
 /** The same harness and group settings for the start menu and the conversation heading. */
 let last: AgentsView | null = null;
 let request = 0;
+let received = 0;
 const changes = signal();
 const rememberAgentsView = (v: AgentsView) => {
   if (last === v) return;
@@ -27,8 +28,11 @@ const rememberAgentsView = (v: AgentsView) => {
 const agentsView = () => {
   const asked = ++request;
   return api.agents().then((v) => {
-    if (asked === request) rememberAgentsView(v);
-    return v;
+    if (asked > received) {
+      received = asked;
+      rememberAgentsView(v);
+    }
+    return last!;
   });
 };
 const refreshAgents = () => void agentsView().catch(() => {});
@@ -214,13 +218,20 @@ export function HarnessUpdate({ harness, view, onView }: { harness: Harness; vie
   const hosts = (found?.hosts ?? []).filter((h) => h.update);
   const running = !!found?.update?.running || hosts.some((h) => h.update?.running);
   const [asked, setAsked] = useState<string | null>(null);
-  usePoll(running, () => agentsView().then(onView, () => {}), 1500);
+  const [needsView, setNeedsView] = useState(false);
+  const refresh = () => agentsView().then((v) => {
+    onView?.(v);
+    setNeedsView(false);
+  }, () => {});
+  usePoll(running || needsView, refresh, 1500);
   const start = (host?: string) => {
     setAsked(host ?? '');
     api
       .updateHarness(harness, host)
-      .then(agentsView)
-      .then(onView)
+      .then(() => {
+        setNeedsView(true);
+        return refresh();
+      })
       .catch(() => {})
       .finally(() => setAsked(null));
   };
@@ -231,7 +242,7 @@ export function HarnessUpdate({ harness, view, onView }: { harness: Harness; vie
       <div key={host ?? ''} className={update.error ? 'harness-update failed' : 'harness-update'} title={now ? u.hint(now, host) : undefined}>
         <span className="harness-update-text">{update.running ? u.running(name, host) : update.error ? u.failed(update.error, host) : u.out(name, update.version, host, now)}</span>
         {!update.running && (
-          <button className="btn" disabled={asked === (host ?? '')} onClick={() => start(host)}>
+          <button className="btn" disabled={needsView || asked === (host ?? '')} onClick={() => start(host)}>
             {update.error ? u.again : u.button}
           </button>
         )}
